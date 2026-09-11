@@ -1,0 +1,230 @@
+{
+  "ctor": {
+    "params": [],
+    "kwparams": {}
+  },
+  "methods": {
+    "compare_markets": {
+      "params": [
+        [
+          "snapshot_a_id",
+          "string"
+        ],
+        [
+          "snapshot_b_id",
+          "string"
+        ],
+        [
+          "comparison_version",
+          "string"
+        ]
+      ],
+      "kwparams": {},
+      "readonly": false,
+      "ret": "string",
+      "payable": false
+    },
+    "get_comparison": {
+      "params": [
+        [
+          "comparison_id",
+          "string"
+        ]
+      ],
+      "kwparams": {},
+      "readonly": true,
+      "ret": "dict"
+    },
+    "get_comparison_count": {
+      "params": [],
+      "kwparams": {},
+      "readonly": true,
+      "ret": "int"
+    },
+    "get_comparison_ids": {
+      "params": [
+        [
+          "offset",
+          "int"
+        ],
+        [
+          "limit",
+          "int"
+        ]
+      ],
+      "kwparams": {},
+      "readonly": true,
+      "ret": "array"
+    },
+    "get_graph_edges": {
+      "params": [
+        [
+          "offset",
+          "int"
+        ],
+        [
+          "limit",
+          "int"
+        ]
+      ],
+      "kwparams": {},
+      "readonly": true,
+      "ret": "array"
+    },
+    "get_latest_comparison": {
+      "params": [
+        [
+          "snapshot_a_id",
+          "string"
+        ],
+        [
+          "snapshot_b_id",
+          "string"
+        ]
+      ],
+      "kwparams": {},
+      "readonly": true,
+      "ret": "dict"
+    },
+    "get_latest_market_snapshot": {
+      "params": [
+        [
+          "platform",
+          "string"
+        ],
+        [
+          "platform_market_id",
+          "string"
+        ]
+      ],
+      "kwparams": {},
+      "readonly": true,
+      "ret": "dict"
+    },
+    "get_market_count": {
+      "params": [],
+      "kwparams": {},
+      "readonly": true,
+      "ret": "int"
+    },
+    "get_market_ids": {
+      "params": [
+        [
+          "offset",
+          "int"
+        ],
+        [
+          "limit",
+          "int"
+        ]
+      ],
+      "kwparams": {},
+      "readonly": true,
+      "ret": "array"
+    },
+    "get_market_snapshot": {
+      "params": [
+        [
+          "snapshot_id",
+          "string"
+        ]
+      ],
+      "kwparams": {},
+      "readonly": true,
+      "ret": "dict"
+    },
+    "get_protocol_version": {
+      "params": [],
+      "kwparams": {},
+      "readonly": true,
+      "ret": "string"
+    },
+    "get_relationship": {
+      "params": [
+        [
+          "snapshot_a_id",
+          "string"
+        ],
+        [
+          "snapshot_b_id",
+          "string"
+        ]
+      ],
+      "kwparams": {},
+      "readonly": true,
+      "ret": "dict"
+    },
+    "register_market_snapshot": {
+      "params": [
+        [
+          "platform",
+          "string"
+        ],
+        [
+          "platform_market_id",
+          "string"
+        ],
+        [
+          "source_url",
+          "string"
+        ],
+        [
+          "title",
+          "string"
+        ],
+        [
+          "description",
+          "string"
+        ],
+        [
+          "outcomes_json",
+          "string"
+        ],
+        [
+          "resolution_rules",
+          "string"
+        ],
+        [
+          "resolution_source",
+          "string"
+        ],
+        [
+          "open_time",
+          "string"
+        ],
+        [
+          "close_time",
+          "string"
+        ],
+        [
+          "resolution_deadline",
+          "string"
+        ],
+        [
+          "clarifications",
+          "string"
+        ],
+        [
+          "retrieved_at",
+          "string"
+        ],
+        [
+          "source_hash",
+          "string"
+        ],
+        [
+          "normalized_facts_json",
+          "string"
+        ],
+        [
+          "canonical_event_hint",
+          "string"
+        ]
+      ],
+      "kwparams": {},
+      "readonly": false,
+      "ret": "string",
+      "payable": false
+    }
+  }
+}

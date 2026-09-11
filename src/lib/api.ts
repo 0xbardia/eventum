@@ -1,0 +1,109 @@
+import { z } from "zod";
+import { getConfig } from "./config";
+import { ContractError } from "./genlayer";
+import { log } from "./logger";
+import { ProviderError } from "./providers/polymarket";
+
+const globalRate = globalThis as unknown as { eventumRate?: Map<string, { count: number; resetAt: number }> };
+
+function rateMap() {
+  globalRate.eventumRate ??= new Map();
+  return globalRate.eventumRate;
+}
+
+export function rateLimit(request: Request): boolean {
+  const config = getConfig();
+  const real = request.headers.get("x-real-ip")?.trim();
+  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  const key = real || forwarded || "unknown";
+  const now = Date.now();
+  const current = rateMap().get(key);
+  if (!current || current.resetAt <= now) {
+    rateMap().set(key, { count: 1, resetAt: now + config.RATE_LIMIT_WINDOW_MS });
+    return true;
+  }
+  if (current.count >= config.RATE_LIMIT_MAX) return false;
+  current.count += 1;
+  return true;
+}
+
+export async function readJson(request: Request): Promise<unknown> {
+  const maxBytes = getConfig().MAX_REQUEST_BODY_BYTES;
+  const contentLength = Number(request.headers.get("content-length") || 0);
+  if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+    throw new ApiError("REQUEST_TOO_LARGE", "The request body is too large.", 413);
+  }
+  const reader = request.body?.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  if (reader) {
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > maxBytes) {
+          try { await reader.cancel(); } catch { /* request already closed */ }
+          throw new ApiError("REQUEST_TOO_LARGE", "The request body is too large.", 413);
+        }
+        chunks.push(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  const text = new TextDecoder().decode(bytes);
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new ApiError("INVALID_JSON", "The request body must be valid JSON.", 400);
+  }
+}
+
+export class ApiError extends Error {
+  constructor(public readonly code: string, message: string, public readonly status = 400) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+export function parseBody<T>(schema: z.ZodType<T>, body: unknown): T {
+  const result = schema.safeParse(body);
+  if (!result.success) {
+    throw new ApiError("INVALID_REQUEST", result.error.issues.map((issue) => issue.message).join("; "), 400);
+  }
+  return result.data;
+}
+
+export function response(data: unknown, status = 200, headers: HeadersInit = {}) {
+  return Response.json(data, {
+    status,
+    headers: { "Cache-Control": "no-store", ...headers },
+  });
+}
+
+export function rateLimitResponse(request: Request): Response | null {
+  if (rateLimit(request)) return null;
+  return withApiHeaders(response({ error: { code: "RATE_LIMITED", message: "Too many requests; try again shortly." } }, 429));
+}
+
+export function errorResponse(error: unknown) {
+  const safe =
+    error instanceof ApiError || error instanceof ProviderError || error instanceof ContractError
+      ? error
+      : new ApiError("INTERNAL_ERROR", "Eventum could not complete the request.", 500);
+  if (safe.status >= 500) log("error", safe.message, { code: safe.code, status: safe.status });
+  return response({ error: { code: safe.code, message: safe.message } }, safe.status);
+}
+
+export function withApiHeaders(responseValue: Response) {
+  responseValue.headers.set("X-Content-Type-Options", "nosniff");
+  responseValue.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  return responseValue;
+}

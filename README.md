@@ -1,0 +1,148 @@
+# Eventum
+
+![Eventum semantic-edge mark](app/icon.svg)
+
+**Semantic interoperability for prediction markets.**
+
+Eventum turns independently authored market rules into structured evidence and
+uses GenLayer consensus to determine whether those markets are equivalent,
+directionally related, overlapping, conflicting, unrelated, or ambiguous.
+
+[Live demo](https://eventum.bydx.fun) · [Status](https://eventum.bydx.fun/status) · [GenLayer Studio](https://studio.genlayer.com/contracts)
+
+![Eventum landing page](docs/assets/landing.png)
+
+## Why it exists
+
+Two prediction markets can ask nearly the same question and still settle under
+different thresholds, dates, authorities, exceptions, or outcome spaces.
+Wording similarity is not settlement equivalence. Eventum makes those rules
+inspectable and keeps the final relationship reusable onchain.
+
+## How it works
+
+```text
+Polymarket URL
+  → Gamma evidence resolution
+  → normalized market preview
+  → durable Comparison Run
+  → wallet-authorized snapshot writes
+  → GenLayer leader + validator adjudication
+  → accepted onchain comparison
+  → direct Market Equivalence Graph edge
+```
+
+The backend is a provider and transaction-preparation boundary. The
+Intelligent Contract validates bounded evidence, performs the semantic
+adjudication, records accepted results, and remains the protocol authority.
+
+## Current deployment
+
+| Field | Value |
+|---|---|
+| Network | Studionet |
+| Chain | `61999` |
+| Protocol | `eventum/1.0.0` |
+| Contract | `0xB4260CDFf766Bf56C2C623A748082a51932870F8` |
+| Source SHA-256 | `f92810de3e381bea9938fc38c55b2ba0625274f239ecf617905539019f5496d4` |
+
+Deployment lineage, source provenance, and historical superseded addresses are
+kept in [`deployments/studionet.json`](deployments/studionet.json). Historical
+addresses are not active runtime targets.
+
+## Protocol model
+
+The contract distinguishes `EQUIVALENT`, `CONDITIONAL_EQUIVALENT`, `SUBSET`,
+`SUPERSET`, `OVERLAPPING`, `CONFLICTING`, specialized mismatches,
+`UNRELATED`, and `AMBIGUOUS`. `safe_to_aggregate` is conservative: an accepted
+comparison still needs a complete one-to-one outcome mapping before aggregation
+is authorized. Graph edges are direct only; Eventum does not invent transitive
+relationships.
+
+A Comparison Run is the durable application record of every attempt. An
+onchain Comparison exists only after consensus accepts the result and the
+contract persists it. `MAJORITY_DISAGREE`, execution failure, and verification
+pending remain visibly distinct states.
+
+Read the detailed model in [`docs/semantic-model.md`](docs/semantic-model.md),
+the consensus lifecycle in [`docs/consensus.md`](docs/consensus.md), and the
+system boundary in [`docs/architecture.md`](docs/architecture.md).
+
+## Routes
+
+- `/` — product explanation and live protocol proof
+- `/compare` — resolve real Polymarket markets and prepare a run
+- `/comparisons` — durable run history, including rejected consensus
+- `/comparisons/runs/<run-id>` — one run's lifecycle and recovery surface
+- `/comparisons/<comparison-id>` — accepted onchain comparison report
+- `/markets` and `/markets/<snapshot-id>` — snapshot records and provenance
+- `/graph` — direct consensus-backed relationship edges
+- `/docs` — in-app field guide
+- `/status` — runtime and contract health
+
+## Requirements
+
+- Node.js `20.20+`
+- pnpm `9.15+`
+- Python `3.14+` for contract tooling
+- Chromium for browser QA
+
+## Setup
+
+```bash
+pnpm install --frozen-lockfile
+python3 -m venv .venv
+.venv/bin/pip install -r contracts/requirements-dev.txt
+cp .env.example .env
+chmod 600 .env
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm build
+pnpm start
+```
+
+`.env` is the server-side runtime source of truth. The browser receives only
+the safe public subset from `/api/runtime-config`; there is no
+`NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS`. A funded wallet on the configured
+network is required for writes. Never put a private key, API token, or wallet
+seed in source control.
+
+## Commands
+
+```bash
+pnpm dev
+pnpm build && pnpm start
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm contract:lint
+pnpm contract:test
+pnpm audit
+pnpm qa:local
+```
+
+Contract changes are release changes. Read [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
+and the contract-change warning in [`CONTRIBUTING.md`](CONTRIBUTING.md) before
+touching `contracts/eventum.py`.
+
+## Security and limitations
+
+Only the Polymarket Gamma adapter is verified. Provider evidence is bounded,
+allowlisted, and treated as untrusted input. SSRF controls, request limits,
+XSS-safe rendering, wallet chain checks, and fail-closed contract reads are
+covered by the test suite and threat model. Eventum is not a trading venue,
+does not publish odds or advice, and does not claim a third-party audit.
+
+See [`SECURITY.md`](SECURITY.md), [`docs/CONTRACT_SECURITY.md`](docs/CONTRACT_SECURITY.md),
+and [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md).
+
+## Contributing
+
+Start with [`CONTRIBUTING.md`](CONTRIBUTING.md). Frontend changes must preserve
+protocol truth, durable run recovery, accessible fallbacks, and production
+Playwright coverage.
+
+## License
+
+Eventum is licensed under the Apache License 2.0. See [LICENSE](LICENSE).

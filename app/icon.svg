@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title>Eventum</title>
+  <rect width="64" height="64" fill="#f5f3ed"/>
+  <path d="M8 16h18l12 16M8 48h18l12-16" fill="none" stroke="#a56522" stroke-width="4" stroke-linecap="square" stroke-linejoin="round"/>
+  <path d="M38 32h18" fill="none" stroke="#17324d" stroke-width="4" stroke-linecap="square"/>
+  <path d="m34 32 4-4 4 4-4 4Z" fill="#f5f3ed" stroke="#17324d" stroke-width="3"/>
+</svg>

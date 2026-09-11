@@ -1,0 +1,44 @@
+{
+  "name": "eventum",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "The semantic interoperability layer for prediction markets.",
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=20.20.0"
+  },
+  "scripts": {
+    "dev": "node scripts/run-next.cjs dev",
+    "build": "next build",
+    "start": "node scripts/run-next.cjs start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/backend/*.test.ts tests/frontend/*.test.ts",
+    "contract:lint": ".venv/bin/genvm-lint check contracts/eventum.py",
+    "contract:schema": ".venv/bin/genvm-lint schema contracts/eventum.py --output contracts/eventum.abi.json",
+    "contract:test": ".venv/bin/pytest tests/contract -q",
+    "verify:studionet": "sh -c 'set -a; . ./.env; set +a; tsx scripts/verify-studionet.ts'",
+    "qa:local": "playwright test",
+    "audit": "pnpm audit --audit-level high"
+  },
+  "dependencies": {
+    "genlayer-js": "1.1.8",
+    "lucide-react": "1.43.0",
+    "next": "16.3.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "22.15.33",
+    "@types/react": "19.1.16",
+    "@types/react-dom": "19.1.9",
+    "eslint": "9.39.1",
+    "eslint-config-next": "16.3.4",
+    "playwright": "1.63.0",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3"
+  }
+}
