@@ -63,7 +63,7 @@ available during the final pass.
 - File: [`contracts/eventum.py`](../contracts/eventum.py)
 - SHA-256: `7d45c0497d3b1466aace1b9b3f8c216ae423331f110f8d618f44a7edbb5b795a`
 - Public methods: 13 total; 11 views, 2 writes
-- Protocol version: `eventum/1.0.0`
+- Historical protocol version: `eventum/1.0.0` (pre-v1.1.1 audit)
 - Comparison version: `1.0.0`
 - Contract tests: 35 Direct Mode cases, all passed
 - Static: `genvm-linter` lint and validation passed; ABI schema generated
@@ -238,7 +238,7 @@ controls, and residual risks are in
 - Health: `/api/health` HTTP 200 with `database:true`
 - Contract status: `/api/status` final serialized probe reported configured
   replacement address, Studionet/61999, `contractReachable:true`, and
-  `eventum/1.0.0`
+  historical `eventum/1.0.0` (pre-v1.1.1 audit)
 - Nginx: Eventum-only vhost proxies to 127.0.0.1:4187; config validation passed;
   unrelated hosts/processes were not changed
 

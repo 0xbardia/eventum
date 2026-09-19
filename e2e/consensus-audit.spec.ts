@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { mkdirSync } from "node:fs";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 
+// Historical forensic deployment; this test never submits a transaction.
 const contract = "0x379A278bA5C13864f0354d40487F73B8A2B620c1";
 const snapshotA = "458f293a9cedea29f4f9d38b66d45861ae5058b2a637df1dbc82ebc8e2cdfc3c";
 const snapshotB = "abed644bc2550b3a9bf13cc9720583f36a325b6cea58acefab62d26a33dc6106";

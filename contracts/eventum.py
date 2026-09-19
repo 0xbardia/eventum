@@ -5,6 +5,10 @@ The contract stores immutable, content-addressed snapshots and direct semantic
 edges.  Raw market text is evidence, never instructions.  The only value that
 can mutate after a nondeterministic call is a newly-created record whose
 validated fields are derived deterministically in this module.
+
+v1.1.1 derives canonical_event_hint from Gamma parent evidence and hashes only
+authoritative settlement-material fields. Caller URLs are provenance only; they
+never choose the fetch target and do not affect snapshot identity.
 """
 
 from genlayer import *
@@ -12,13 +16,21 @@ import hashlib
 import json
 
 
-PROTOCOL_VERSION = "eventum/1.0.0"
+PROTOCOL_VERSION = "eventum/1.1.1"
 COMPARISON_VERSION = "1.0.0"
 MAX_PAGE = 50
 MAX_TEXT = 8000
 MAX_FACTS = 8000
 MAX_REASONS = 8
 MAX_DIFFERENCES = 8
+MAX_SOURCE_BODY = 200000
+SUPPORTED_PROVIDER = "polymarket"
+GAMMA_MARKETS_URL = "https://gamma-api.polymarket.com/markets"
+POLYMARKET_HOSTS = (
+    "polymarket.com",
+    "www.polymarket.com",
+    "gamma-api.polymarket.com",
+)
 
 RELATIONS = [
     "EQUIVALENT",
@@ -59,6 +71,14 @@ REASON_CODES = [
     "AGGREGATION_IDENTITY_UNPROVEN",
 ]
 
+SOURCE_FAILURES = (
+    "SOURCE_UNSUPPORTED",
+    "SOURCE_UNAVAILABLE",
+    "SOURCE_NOT_FOUND",
+    "SOURCE_RESPONSE_INVALID",
+    "SOURCE_EVIDENCE_MISMATCH",
+)
+
 
 def _fail(code: str) -> None:
     raise gl.vm.UserError(code)
@@ -74,13 +94,73 @@ def _text(value: str, field: str, maximum: int, required: bool = True) -> str:
     return value
 
 
-def _url(value: str) -> str:
+def _provider(value: str) -> str:
+    value = _text(value, "platform", 64).lower()
+    if value != SUPPORTED_PROVIDER:
+        _fail("SOURCE_UNSUPPORTED")
+    return value
+
+
+def _source_market_id(value: str) -> str:
+    value = _text(value, "platform_market_id", 32)
+    if not value.isdigit() or value.startswith("0") or len(value) > 18:
+        _fail("INVALID_PLATFORM_MARKET_ID")
+    return value
+
+
+def _is_private_host(host: str) -> bool:
+    if host in ("localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]"):
+        return True
+    if host.endswith(".local") or host.endswith(".localhost"):
+        return True
+    parts = host.split(".")
+    if len(parts) == 4 and all(p.isdigit() and len(p) < 4 for p in parts):
+        a, b = int(parts[0]), int(parts[1])
+        if a == 10 or a == 127 or (a == 192 and b == 168) or (a == 169 and b == 254):
+            return True
+        if a == 172 and 16 <= b <= 31:
+            return True
+        if a == 0:
+            return True
+    return False
+
+
+def _gamma_path_market_id(path: str) -> str:
+    segments = [part for part in path.split("/") if part]
+    if len(segments) != 2 or segments[0] != "markets":
+        return ""
+    return segments[1]
+
+
+def _source_url(value: str) -> str:
     value = _text(value, "source_url", 512)
-    lower = value.lower()
-    if not (lower.startswith("https://") or lower.startswith("http://")):
+    if "\\" in value or "\n" in value or "\r" in value or "\t" in value:
         _fail("INVALID_SOURCE_URL")
-    authority = value.split("://", 1)[1].split("/", 1)[0].split("?", 1)[0]
+    lower = value.lower()
+    if not lower.startswith("https://") and not lower.startswith("http://"):
+        _fail("INVALID_SOURCE_URL")
+    rest = value.split("://", 1)[1]
+    if not rest or rest.startswith("/") or "@" in rest.split("/", 1)[0].split("?", 1)[0]:
+        _fail("INVALID_SOURCE_URL")
+    authority = rest.split("/", 1)[0].split("?", 1)[0].split("#", 1)[0]
     if not authority or ":" in authority or any(ch.isspace() for ch in authority):
+        _fail("INVALID_SOURCE_URL")
+    host = authority.lower()
+    if host.startswith("[") or _is_private_host(host):
+        _fail("INVALID_SOURCE_URL")
+    if host not in POLYMARKET_HOSTS:
+        _fail("SOURCE_UNSUPPORTED")
+    path = ""
+    after = rest[len(authority):]
+    if after.startswith("/"):
+        path = after.split("?", 1)[0].split("#", 1)[0]
+    if ".." in path.split("/"):
+        _fail("INVALID_SOURCE_URL")
+    if host == "gamma-api.polymarket.com":
+        market_id = _gamma_path_market_id(path)
+        if not market_id.isdigit() or market_id.startswith("0") or len(market_id) > 18:
+            _fail("INVALID_SOURCE_URL")
+    elif not path.startswith("/event/") and not path.startswith("/market/") and not path.startswith("/markets/"):
         _fail("INVALID_SOURCE_URL")
     return value
 
@@ -150,6 +230,21 @@ def _canonical(value) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
+def _snapshot_identity(record: dict) -> dict:
+    """Settlement-material fields only. retrieved_at, hashes, facts, version, source_url, clarifications, description, and resolution_deadline are metadata."""
+    return {
+        "canonical_event_hint": record["canonical_event_hint"],
+        "close_time": record["close_time"],
+        "open_time": record["open_time"],
+        "outcomes": record["outcomes"],
+        "platform": record["platform"],
+        "platform_market_id": record["platform_market_id"],
+        "resolution_rules": record["resolution_rules"],
+        "resolution_source": record["resolution_source"],
+        "title": record["title"],
+    }
+
+
 def _market_key(platform: str, platform_market_id: str) -> str:
     return _hash("eventum:market:v1|" + platform.lower() + "|" + platform_market_id)
 
@@ -180,6 +275,358 @@ def _ambiguous(reason: str, rationale: str = "Consensus could not produce a safe
         "material_differences": [],
         "concise_rationale": rationale[:800],
     }
+
+
+def _decode_body(raw) -> str:
+    if raw is None:
+        return ""
+    if isinstance(raw, bytes):
+        if len(raw) > MAX_SOURCE_BODY:
+            return ""
+        return raw.decode("utf-8", errors="replace")
+    if isinstance(raw, str):
+        if len(raw) > MAX_SOURCE_BODY:
+            return ""
+        return raw
+    return ""
+
+
+def _bounded_str(value, maximum: int) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return ""
+    if isinstance(value, int) and not isinstance(value, bool):
+        text = str(value)
+        return text if len(text) <= maximum else ""
+    if not isinstance(value, str):
+        return ""
+    if "\x00" in value or len(value) > maximum:
+        return ""
+    return value
+
+
+def _parse_outcomes_field(value):
+    parsed = value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except Exception:
+            return None
+    if not isinstance(parsed, list) or len(parsed) < 2 or len(parsed) > 16:
+        return None
+    labels = []
+    seen = []
+    for label in parsed:
+        if not isinstance(label, str) or not label.strip() or len(label) > 64:
+            return None
+        lowered = label.strip().lower()
+        if lowered in seen:
+            return None
+        seen.append(lowered)
+        labels.append(label)
+    return labels
+
+
+def _threshold_token(value) -> str:
+    if isinstance(value, bool) or value is None:
+        return ""
+    if isinstance(value, int):
+        if value < 0:
+            return ""
+        return str(value)
+    if isinstance(value, float):
+        if value < 0 or value != int(value):
+            return ""
+        return str(int(value))
+    if not isinstance(value, str):
+        return ""
+    digits = []
+    for ch in value:
+        if ch.isdigit():
+            digits.append(ch)
+    if not digits:
+        return ""
+    token = "".join(digits).lstrip("0")
+    return token if token else "0"
+
+
+def _extract_threshold(group_title: str, question: str) -> str:
+    from_title = _threshold_token(group_title)
+    if from_title:
+        return from_title
+    return _threshold_token(question)
+
+
+def _gamma_url(source_market_id: str) -> str:
+    return GAMMA_MARKETS_URL + "/" + source_market_id
+
+
+def _parent_event(payload: dict) -> dict:
+    events = payload.get("events")
+    if not isinstance(events, list) or not events:
+        return {
+            "parent_event_id": "",
+            "parent_event_slug": "",
+            "parent_event_ticker": "",
+            "parent_event_title": "",
+        }
+    event = events[0]
+    if not isinstance(event, dict):
+        return {
+            "parent_event_id": "",
+            "parent_event_slug": "",
+            "parent_event_ticker": "",
+            "parent_event_title": "",
+        }
+    return {
+        "parent_event_id": _bounded_str(event.get("id"), 32),
+        "parent_event_slug": _bounded_str(event.get("slug"), 256),
+        "parent_event_ticker": _bounded_str(event.get("ticker"), 256),
+        "parent_event_title": _bounded_str(event.get("title"), 500),
+    }
+
+
+def _derived_canonical_event_hint(assertion: dict) -> str:
+    parent_id = (assertion.get("parent_event_id") or "").strip()
+    if parent_id:
+        hint = "polymarket:event:" + parent_id
+        if len(hint) <= 160:
+            return hint
+    parent_slug = (assertion.get("parent_event_slug") or "").strip()
+    if parent_slug:
+        hint = "polymarket:event-slug:" + parent_slug
+        if len(hint) <= 160:
+            return hint
+    return ""
+
+
+def _compatible_canonical_event_hint(hint: str, assertion: dict) -> bool:
+    if not hint:
+        return True
+    allowed = set()
+    parent_id = (assertion.get("parent_event_id") or "").strip()
+    parent_slug = (assertion.get("parent_event_slug") or "").strip()
+    parent_ticker = (assertion.get("parent_event_ticker") or "").strip()
+    if parent_id:
+        allowed.add(parent_id)
+        allowed.add("polymarket:event:" + parent_id)
+    if parent_slug:
+        allowed.add(parent_slug)
+        allowed.add("polymarket:event-slug:" + parent_slug)
+    if parent_ticker:
+        allowed.add(parent_ticker)
+    return hint in allowed
+
+
+def _http_status(response) -> int:
+    if isinstance(response, str) or isinstance(response, bytes):
+        return 200
+    status = getattr(response, "status_code", None)
+    if status is None:
+        status = getattr(response, "status", None)
+    if isinstance(status, int):
+        return status
+    if isinstance(status, str) and status.isdigit():
+        return int(status)
+    return 0
+
+
+def _http_body(response) -> str:
+    if isinstance(response, str) or isinstance(response, bytes):
+        return _decode_body(response)
+    return _decode_body(getattr(response, "body", None))
+
+
+def _source_failure(code: str) -> dict:
+    return {"status": code}
+
+
+def _fetch_gamma(url: str):
+    try:
+        return gl.nondet.web.get(url)
+    except Exception:
+        return None
+
+
+def _parse_gamma_payload(response) -> dict:
+    if response is None:
+        return _source_failure("SOURCE_UNAVAILABLE")
+    status = _http_status(response)
+    if status == 404:
+        return _source_failure("SOURCE_NOT_FOUND")
+    if status == 429 or status >= 500 or status == 0:
+        return _source_failure("SOURCE_UNAVAILABLE")
+    if status != 200:
+        return _source_failure("SOURCE_RESPONSE_INVALID")
+    text = _http_body(response)
+    if not text.strip():
+        return _source_failure("SOURCE_RESPONSE_INVALID")
+    try:
+        parsed = json.loads(text)
+    except Exception:
+        return _source_failure("SOURCE_RESPONSE_INVALID")
+    if isinstance(parsed, list):
+        if not parsed:
+            return _source_failure("SOURCE_NOT_FOUND")
+        if not isinstance(parsed[0], dict):
+            return _source_failure("SOURCE_RESPONSE_INVALID")
+        return {"status": "ok", "payload": parsed[0]}
+    if isinstance(parsed, dict):
+        if parsed.get("type") == "not found error":
+            return _source_failure("SOURCE_NOT_FOUND")
+        return {"status": "ok", "payload": parsed}
+    return _source_failure("SOURCE_RESPONSE_INVALID")
+
+
+def _attach_parent_event(payload: dict, source_market_id: str) -> dict:
+    if isinstance(payload.get("events"), list) and payload.get("events"):
+        return payload
+    listed = _fetch_gamma(GAMMA_MARKETS_URL + "?id=" + source_market_id)
+    parsed = _parse_gamma_payload(listed)
+    if parsed.get("status") == "ok" and isinstance(parsed.get("payload"), dict):
+        events = parsed["payload"].get("events")
+        if isinstance(events, list) and events:
+            payload = dict(payload)
+            payload["events"] = events
+            return payload
+    closed = _fetch_gamma(GAMMA_MARKETS_URL + "?id=" + source_market_id + "&closed=true")
+    parsed = _parse_gamma_payload(closed)
+    if parsed.get("status") == "ok" and isinstance(parsed.get("payload"), dict):
+        events = parsed["payload"].get("events")
+        if isinstance(events, list) and events:
+            payload = dict(payload)
+            payload["events"] = events
+    return payload
+
+
+def _normalize_source_payload(payload: dict, source_market_id: str) -> dict:
+    if not isinstance(payload, dict):
+        return _source_failure("SOURCE_RESPONSE_INVALID")
+    market_id = _bounded_str(payload.get("id"), 32)
+    if market_id != source_market_id:
+        return _source_failure("SOURCE_RESPONSE_INVALID")
+    question = _bounded_str(payload.get("question"), 500)
+    description = _bounded_str(payload.get("description"), MAX_TEXT)
+    slug = _bounded_str(payload.get("slug"), 256)
+    if not question or not description or not slug:
+        return _source_failure("SOURCE_RESPONSE_INVALID")
+    outcomes = _parse_outcomes_field(payload.get("outcomes"))
+    if not outcomes:
+        return _source_failure("SOURCE_RESPONSE_INVALID")
+    group_title = _bounded_str(payload.get("groupItemTitle"), 128)
+    assertion = {
+        "provider": SUPPORTED_PROVIDER,
+        "source_market_id": market_id,
+        "slug": slug,
+        "question": question,
+        "description": description,
+        "outcomes": outcomes,
+        "resolution_source": _bounded_str(payload.get("resolutionSource"), 1000),
+        "open_time": _bounded_str(payload.get("startDate"), 128),
+        "close_time": _bounded_str(payload.get("endDate"), 128),
+        "group_item_title": group_title,
+        "threshold": _extract_threshold(group_title, question),
+        "condition_id": _bounded_str(payload.get("conditionId"), 128),
+    }
+    assertion.update(_parent_event(payload))
+    return {"status": "ok", "assertion": assertion}
+
+
+def _load_source_assertion(source_market_id: str) -> dict:
+    """Fetch and extract a bounded Gamma assertion. Web I/O lives only here."""
+    primary = _fetch_gamma(_gamma_url(source_market_id))
+    parsed = _parse_gamma_payload(primary)
+    if parsed.get("status") != "ok":
+        return parsed
+    payload = _attach_parent_event(parsed["payload"], source_market_id)
+    return _normalize_source_payload(payload, source_market_id)
+
+
+def _consensus_source_assertion(source_market_id: str) -> dict:
+    def fetch():
+        return _canonical(_load_source_assertion(source_market_id))
+
+    raw = gl.eq_principle.strict_eq(fetch)
+    if isinstance(raw, dict):
+        parsed = raw
+    elif isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+        except Exception:
+            _fail("SOURCE_UNAVAILABLE")
+    else:
+        _fail("SOURCE_UNAVAILABLE")
+    if not isinstance(parsed, dict):
+        _fail("SOURCE_UNAVAILABLE")
+    status = parsed.get("status")
+    if status == "ok" and isinstance(parsed.get("assertion"), dict):
+        return parsed["assertion"]
+    if status in SOURCE_FAILURES:
+        _fail(status)
+    _fail("SOURCE_UNAVAILABLE")
+
+
+def _url_path_and_host(source_url: str) -> tuple:
+    rest = source_url.split("://", 1)[1]
+    authority = rest.split("/", 1)[0].split("?", 1)[0].split("#", 1)[0]
+    path = ""
+    after = rest[len(authority):]
+    if after.startswith("/"):
+        path = after.split("?", 1)[0].split("#", 1)[0]
+    return authority.lower(), path
+
+
+def _corroborate_snapshot(record: dict, assertion: dict) -> None:
+    if assertion.get("provider") != SUPPORTED_PROVIDER:
+        _fail("SOURCE_EVIDENCE_MISMATCH")
+    if record["platform_market_id"] != assertion.get("source_market_id"):
+        _fail("SOURCE_EVIDENCE_MISMATCH")
+    if record["outcomes"] != assertion.get("outcomes"):
+        _fail("SOURCE_EVIDENCE_MISMATCH")
+    if record["title"].strip() != (assertion.get("question") or "").strip():
+        _fail("SOURCE_EVIDENCE_MISMATCH")
+    if record["resolution_rules"].strip() != (assertion.get("description") or "").strip():
+        _fail("SOURCE_EVIDENCE_MISMATCH")
+    claimed_source = record["resolution_source"].strip()
+    if claimed_source and claimed_source != (assertion.get("resolution_source") or "").strip():
+        _fail("SOURCE_EVIDENCE_MISMATCH")
+    if record["open_time"].strip() and record["open_time"].strip() != (assertion.get("open_time") or "").strip():
+        _fail("SOURCE_EVIDENCE_MISMATCH")
+    if record["close_time"].strip() and record["close_time"].strip() != (assertion.get("close_time") or "").strip():
+        _fail("SOURCE_EVIDENCE_MISMATCH")
+    host, path = _url_path_and_host(record["source_url"])
+    slug = assertion.get("slug") or ""
+    parent_slug = assertion.get("parent_event_slug") or ""
+    segments = [part for part in path.split("/") if part]
+    if host == "gamma-api.polymarket.com":
+        if _gamma_path_market_id(path) != record["platform_market_id"]:
+            _fail("SOURCE_EVIDENCE_MISMATCH")
+    elif host in ("polymarket.com", "www.polymarket.com"):
+        if not segments:
+            _fail("SOURCE_EVIDENCE_MISMATCH")
+        last = segments[-1]
+        if segments[0] in ("market", "markets"):
+            if last != slug:
+                _fail("SOURCE_EVIDENCE_MISMATCH")
+        elif segments[0] == "event":
+            if len(segments) >= 3:
+                if last != slug:
+                    _fail("SOURCE_EVIDENCE_MISMATCH")
+            elif last not in {slug, parent_slug}:
+                _fail("SOURCE_EVIDENCE_MISMATCH")
+        else:
+            _fail("SOURCE_EVIDENCE_MISMATCH")
+    else:
+        _fail("SOURCE_EVIDENCE_MISMATCH")
+    if not _compatible_canonical_event_hint(record["canonical_event_hint"].strip(), assertion):
+        _fail("SOURCE_EVIDENCE_MISMATCH")
+    facts = record.get("normalized_facts") or {}
+    if isinstance(facts, dict) and "threshold" in facts:
+        claimed = _threshold_token(facts.get("threshold"))
+        source_threshold = assertion.get("threshold") or ""
+        if not claimed or not source_threshold or claimed != source_threshold:
+            _fail("SOURCE_EVIDENCE_MISMATCH")
 
 
 def _normalise_model_result(raw, outcomes_a: list, outcomes_b: list, hint_a: str, hint_b: str) -> dict:
@@ -421,9 +868,9 @@ class Eventum(gl.Contract):
         normalized_facts_json: str,
         canonical_event_hint: str,
     ) -> tuple:
-        platform = _text(platform, "platform", 64).lower()
-        platform_market_id = _text(platform_market_id, "platform_market_id", 256)
-        source_url = _url(source_url)
+        platform = _provider(platform)
+        platform_market_id = _source_market_id(platform_market_id)
+        source_url = _source_url(source_url)
         title = _text(title, "title", 500)
         description = _text(description, "description", 6000, False)
         outcomes = _outcomes(outcomes_json)
@@ -505,16 +952,18 @@ class Eventum(gl.Contract):
             normalized_facts_json,
             canonical_event_hint,
         )
+        assertion = _consensus_source_assertion(record["platform_market_id"])
+        _corroborate_snapshot(record, assertion)
+        record["canonical_event_hint"] = _derived_canonical_event_hint(assertion)
+        record["source_evidence_hash"] = _hash(_canonical(assertion))
+        snapshot_id = _hash("eventum:snapshot:v1|" + _canonical(_snapshot_identity(record)))
+        if snapshot_id in self.snapshots:
+            return snapshot_id
         if market_key in self.versions_by_market:
             version = self.versions_by_market[market_key] + 1
         else:
             version = 1
         record["version"] = version
-        identity = record.copy()
-        identity["version"] = 0
-        snapshot_id = _hash("eventum:snapshot:v1|" + _canonical(identity))
-        if snapshot_id in self.snapshots:
-            _fail("DUPLICATE_SNAPSHOT")
         record["snapshot_id"] = snapshot_id
         self.snapshots[snapshot_id] = _canonical(record)
         self.latest_by_market[market_key] = snapshot_id
@@ -584,7 +1033,10 @@ class Eventum(gl.Contract):
         result["snapshot_a_id"] = stored_a
         result["snapshot_b_id"] = stored_b
         result["comparison_version"] = comparison_version
-        result["evidence_hashes"] = [stored_snapshot_a["source_hash"], stored_snapshot_b["source_hash"]]
+        result["evidence_hashes"] = [
+            stored_snapshot_a["source_evidence_hash"],
+            stored_snapshot_b["source_evidence_hash"],
+        ]
         result["created_at"] = stored_snapshot_a["retrieved_at"] + "|" + stored_snapshot_b["retrieved_at"]
         comparison_id = _hash("eventum:comparison:v1|" + stored_a + "|" + stored_b + "|" + comparison_version)
         result["comparison_id"] = comparison_id
@@ -613,7 +1065,7 @@ class Eventum(gl.Contract):
 
     @gl.public.view
     def get_latest_market_snapshot(self, platform: str, platform_market_id: str) -> dict:
-        key = _market_key(_text(platform, "platform", 64).lower(), _text(platform_market_id, "platform_market_id", 256))
+        key = _market_key(_provider(platform), _source_market_id(platform_market_id))
         if key not in self.latest_by_market:
             _fail("MARKET_NOT_FOUND")
         return self._snapshot(self.latest_by_market[key])

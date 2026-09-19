@@ -61,7 +61,7 @@ environment-gated skips; the recorded local production-build sweep passed 23
 tests with the same 13 skips, including eight simulated wallet failure cases.
 Isolated production real-provider preview, finalized comparison, and
 keyboard/125% checks passed. A serialized post-release live probe returned
-`get_protocol_version=eventum/1.0.0` and `get_market_count=2`; burst probes can
+`get_protocol_version=eventum/1.1.1` and `get_market_count=2`; burst probes can
 still hit the shared Studionet `500 requests per hour` quota, which the app
 reports as unavailable rather than substituting cache state.
 The later IPv4-mapped-address SSRF hardening was covered by backend regression

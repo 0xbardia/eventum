@@ -5,23 +5,17 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "genlayer-js";
 import { studionet, testnetBradbury } from "genlayer-js/chains";
-import { TransactionHashVariant, TransactionStatus } from "genlayer-js/types";
+import { TransactionHashVariant } from "genlayer-js/types";
 import type { Hash } from "genlayer-js/types";
 import { loadPublicConfig, type PublicConfig } from "@/lib/public-config";
-import { assertSnapshotReadback, parseContractJson } from "@/lib/transaction-readback";
-import { classifyTransaction, transactionExecutionResultName } from "@/lib/transaction-status";
+import { parseContractJson } from "@/lib/transaction-readback";
 import { formatDate, shortHash } from "@/lib/format";
-import type { Comparison, ComparisonRun, MarketSnapshot, Relation } from "@/lib/types";
+import type { ComparisonRun, MarketSnapshot, Relation } from "@/lib/types";
 
 type WalletProvider = {
   request(args: { method: string; params?: unknown[] }): Promise<unknown>;
   on?: (event: string, callback: (...args: unknown[]) => void) => void;
   removeListener?: (event: string, callback: (...args: unknown[]) => void) => void;
-};
-
-type TransactionReader = {
-  getTransaction(args: { hash: Hash }): Promise<unknown>;
-  request(args: { method: "eth_getTransactionByHash"; params: [Hash] }): Promise<unknown>;
 };
 
 function walletProvider(): WalletProvider | null {
@@ -36,44 +30,6 @@ function contractJson(value: unknown): Record<string, unknown> {
   const parsed = parseContractJson(value);
   if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") throw new Error("The contract returned an invalid object.");
   return parsed;
-}
-
-function comparisonFromContract(value: unknown): Comparison {
-  const item = contractJson(value);
-  return {
-    comparisonId: String(item.comparison_id),
-    snapshotAId: String(item.snapshot_a_id),
-    snapshotBId: String(item.snapshot_b_id),
-    relation: String(item.relation) as Comparison["relation"],
-    safeToCompare: Boolean(item.safe_to_compare),
-    safeToAggregate: Boolean(item.safe_to_aggregate),
-    canonicalEventKeyIfSafe: String(item.canonical_event_key_if_safe || ""),
-    outcomeMapping: (item.outcome_mapping || {}) as Comparison["outcomeMapping"],
-    reasonCodes: Array.isArray(item.reason_codes) ? item.reason_codes.map(String) : [],
-    materialDifferences: Array.isArray(item.material_differences) ? item.material_differences.map(String) : [],
-    conciseRationale: String(item.concise_rationale || ""),
-    evidenceHashes: Array.isArray(item.evidence_hashes) ? item.evidence_hashes.map(String) : [],
-    comparisonVersion: String(item.comparison_version),
-    createdAt: String(item.created_at || ""),
-    direct: true,
-    authority: "onchain",
-  };
-}
-
-async function fullTransaction(client: TransactionReader, hash: Hash): Promise<unknown> {
-  const sdkTransaction = await client.getTransaction({ hash });
-  if (transactionExecutionResultName(sdkTransaction)) return sdkTransaction;
-  try {
-    const raw = await client.request({ method: "eth_getTransactionByHash", params: [hash] });
-    if (raw && typeof raw === "object" && !Array.isArray(raw) && sdkTransaction && typeof sdkTransaction === "object") {
-      const rawRecord = raw as Record<string, unknown>;
-      const sdkRecord = sdkTransaction as Record<string, unknown>;
-      return { ...rawRecord, ...sdkRecord, consensus_data: sdkRecord.consensus_data ?? rawRecord.consensus_data };
-    }
-  } catch {
-    // Keep the SDK result as the read-only fallback; no write is safe here.
-  }
-  return sdkTransaction;
 }
 
 function eventTone(state: string) {
@@ -105,9 +61,15 @@ export function ComparisonRunClient({ initialRun }: { initialRun: ComparisonRun 
   const [refreshing, setRefreshing] = useState(false);
   const [copied, setCopied] = useState("");
   const reconcileLock = useRef(false);
+  const runRef = useRef(run);
+
+  useEffect(() => {
+    runRef.current = run;
+  }, [run]);
 
   const wrongNetwork = Boolean(runtimeConfig && chainId !== null && chainId !== runtimeConfig.chainId);
   const forensic = !run.registerArgs;
+  const terminal = ["PERSISTED_ONCHAIN", "MAJORITY_DISAGREE", "CONSENSUS_REJECTED", "EXECUTION_FAILED"].includes(run.state);
   const canStart = Boolean(run.snapshots && run.registerArgs && runtimeConfig?.contractAddress === run.contractAddress);
 
   useEffect(() => {
@@ -155,10 +117,6 @@ export function ComparisonRunClient({ initialRun }: { initialRun: ComparisonRun 
     return body.run;
   }
 
-  async function transition(state: string, detail: string, patch: Record<string, unknown> = {}) {
-    return updateRun({ ...patch, state, eventState: state, eventDetail: detail });
-  }
-
   async function connect() {
     const current = walletProvider();
     if (!current) throw new Error("A browser wallet is required for onchain writes.");
@@ -172,93 +130,71 @@ export function ComparisonRunClient({ initialRun }: { initialRun: ComparisonRun 
     return { account: accounts[0], wallet: current };
   }
 
-  async function readClient(config: PublicConfig) {
-    return createClient({ chain: networkChain(config.network), endpoint: config.rpcUrl });
-  }
-
-  async function waitForTransaction(client: TransactionReader & { waitForTransactionReceipt(args: { hash: Hash; status: TransactionStatus; interval: number; retries: number }): Promise<unknown> }, hash: Hash, operation: string) {
-    await transition("CONSENSUS_PENDING", `${operation} submitted; awaiting GenLayer consensus.`);
+  const reconcileNow = useCallback(async () => {
+    if (reconcileLock.current) return runRef.current;
+    reconcileLock.current = true;
     try {
-      await client.waitForTransactionReceipt({ hash, status: TransactionStatus.FINALIZED, interval: 3000, retries: 100 });
-    } catch {
-      // The hash remains durable; reconciliation below decides whether it is safe to continue.
+      const response = await fetch(`/api/comparisons/runs/${runRef.current.runId}?reconcile=1`, { cache: "no-store" });
+      const body = (await response.json()) as { run?: ComparisonRun; error?: { message?: string } };
+      if (!response.ok || !body.run) throw new Error(body.error?.message || "Verification is temporarily unavailable. Your submitted transaction has not been resubmitted.");
+      setRun(body.run);
+      return body.run;
+    } finally {
+      reconcileLock.current = false;
     }
-    for (let attempt = 0; attempt < 4; attempt += 1) {
-      try {
-        const observed = await fullTransaction(client, hash);
-        const classification = classifyTransaction(observed);
-        if (classification.state === "consensus-error") {
-          await transition("MAJORITY_DISAGREE", `${operation} finalized without accepting consensus. No replacement transaction is safe.`, {
-            consensusOutcome: classification.consensusResultName,
-            executionResult: classification.executionResultName,
-            persistedOnchain: false,
-            failureReason: "Consensus rejected the proposal; no onchain comparison was persisted.",
-          });
-          throw new Error(`${operation} reached FINALIZED but consensus did not accept it.`);
-        }
-        if (classification.state === "execution-error") {
-          await transition("EXECUTION_FAILED", `${operation} finalized with a contract execution error.`, { executionResult: classification.executionResultName, persistedOnchain: false, failureReason: "The contract execution returned an error." });
-          throw new Error(`${operation} execution failed after finalization.`);
-        }
-        if (classification.state === "success") {
-          await transition("FINALIZED_VERIFYING", `${operation} finalized; verifying the contract read-back.`, { consensusOutcome: classification.consensusResultName, executionResult: classification.executionResultName });
-          return observed;
-        }
-      } catch (error) {
-        if (error instanceof Error && /consensus did not accept|execution failed/.test(error.message)) throw error;
-      }
-      if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 700));
-    }
-    await transition("VERIFICATION_PENDING", `${operation} is finalized or submitted, but execution verification is temporarily unavailable.`);
-    throw new Error(`${operation} remains verification-pending. The same transaction hash is preserved; do not submit again.`);
-  }
+  }, []);
 
-  async function registerSnapshot(client: ReturnType<typeof createClient>, snapshot: MarketSnapshot, args: string[], index: 0 | 1) {
+  useEffect(() => {
+    let cancelled = false;
+    let timer: number | undefined;
+    let attempt = 0;
+    const delays = [2000, 3000, 5000, 8000, 10000, 10000, 10000];
+    const schedule = () => {
+      const current = runRef.current;
+      const active = Boolean(current.comparisonTx || current.snapshotBTx || current.snapshotATx) && !current.persistedOnchain && !["MAJORITY_DISAGREE", "CONSENSUS_REJECTED", "EXECUTION_FAILED"].includes(current.state);
+      if (cancelled || !active) return;
+      timer = window.setTimeout(async () => {
+        if (cancelled) return;
+        if (!document.hidden) {
+          try { await reconcileNow(); } catch { setMessage("Verification is temporarily unavailable. Your submitted transaction has not been resubmitted."); }
+          attempt += 1;
+        }
+        schedule();
+      }, document.hidden ? 10000 : delays[Math.min(attempt, delays.length - 1)]);
+    };
+    const onVisibility = () => {
+      if (!document.hidden) {
+        attempt = 0;
+        void reconcileNow().catch(() => setMessage("Verification is temporarily unavailable. Your submitted transaction has not been resubmitted."));
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    schedule();
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [reconcileNow, run.comparisonTx, run.snapshotATx, run.snapshotBTx, run.persistedOnchain, run.state]);
+
+  async function registerSnapshot(client: ReturnType<typeof createClient>, snapshot: MarketSnapshot, args: string[], index: 0 | 1, currentRun: ComparisonRun) {
     let existing: Record<string, unknown> | null = null;
     try {
       existing = contractJson(await client.readContract({ address: run.contractAddress as `0x${string}`, functionName: "get_latest_market_snapshot", args: [snapshot.platform, snapshot.platformMarketId], transactionHashVariant: TransactionHashVariant.LATEST_FINAL, jsonSafeReturn: true }));
     } catch {
       // A fresh deployment has no latest snapshot yet; the registration is still the only write path.
     }
-    if (existing?.snapshot_id === snapshot.snapshotId) {
-      assertSnapshotReadback(existing, snapshot);
-      await transition(index === 0 ? "SNAPSHOT_A_VERIFIED" : "SNAPSHOT_B_VERIFIED", `Snapshot ${index === 0 ? "A" : "B"} already matches the finalized onchain record.`);
-      return;
+    if (existing?.platform_market_id === snapshot.platformMarketId && String(existing.source_hash || "").toLowerCase() === args[13].toLowerCase() && typeof existing.source_evidence_hash === "string") {
+      return reconcileNow();
     }
     const txField = index === 0 ? "snapshotATx" : "snapshotBTx";
-    const prior = index === 0 ? run.snapshotATx : run.snapshotBTx;
+    const prior = index === 0 ? currentRun.snapshotATx : currentRun.snapshotBTx;
     let hash = prior as Hash | undefined;
     if (!hash) {
-      await transition("WAITING_SIGNATURE", `Waiting for wallet signature for snapshot ${index === 0 ? "A" : "B"}.`);
       hash = await client.writeContract({ address: run.contractAddress as `0x${string}`, functionName: "register_market_snapshot", args: args as never[], value: 0n }) as Hash;
-      await updateRun({ [txField]: hash, state: "SUBMITTED", eventState: "SUBMITTED", eventDetail: `Snapshot ${index === 0 ? "A" : "B"} transaction submitted; hash persisted before monitoring.` });
-    } else {
-      await transition("SUBMITTED", `Resuming snapshot ${index === 0 ? "A" : "B"} from its existing transaction hash.`);
+      return updateRun({ [txField]: hash });
     }
-    await waitForTransaction(client as never, hash, `Snapshot ${index === 0 ? "A" : "B"}`);
-    const registered = contractJson(await client.readContract({ address: run.contractAddress as `0x${string}`, functionName: "get_latest_market_snapshot", args: [snapshot.platform, snapshot.platformMarketId], transactionHashVariant: TransactionHashVariant.LATEST_FINAL, jsonSafeReturn: true }));
-    assertSnapshotReadback(registered, snapshot);
-    await transition(index === 0 ? "SNAPSHOT_A_VERIFIED" : "SNAPSHOT_B_VERIFIED", `Snapshot ${index === 0 ? "A" : "B"} read-back matches the prepared evidence.`, { state: index === 0 ? "SNAPSHOT_A_VERIFIED" : "SNAPSHOT_B_VERIFIED" });
-  }
-
-  async function verifySnapshotReadback(client: ReturnType<typeof createClient>, index: 0 | 1) {
-    const snapshot = run.snapshots?.[index];
-    if (!snapshot) throw new Error("Snapshot evidence is unavailable for this run.");
-    const value = await client.readContract({ address: run.contractAddress as `0x${string}`, functionName: "get_market_snapshot", args: [snapshot.snapshotId], transactionHashVariant: TransactionHashVariant.LATEST_FINAL, jsonSafeReturn: true });
-    assertSnapshotReadback(value, snapshot);
-    await transition(index === 0 ? "SNAPSHOT_A_VERIFIED" : "SNAPSHOT_B_VERIFIED", `Snapshot ${index === 0 ? "A" : "B"} read-back matches the prepared evidence.`);
-  }
-
-  async function verifyComparisonReadback(client: ReturnType<typeof createClient>) {
-    const value = await client.readContract({ address: run.contractAddress as `0x${string}`, functionName: "get_latest_comparison", args: [run.snapshotAId, run.snapshotBId], transactionHashVariant: TransactionHashVariant.LATEST_FINAL, jsonSafeReturn: true });
-    const comparison = comparisonFromContract(value);
-    if (comparison.snapshotAId !== run.snapshotAId || comparison.snapshotBId !== run.snapshotBId || comparison.comparisonVersion !== run.comparisonVersion) throw new Error("Comparison read-back did not match this run.");
-    await updateRun({ state: "PERSISTED_ONCHAIN", eventState: "READ_BACK_VERIFIED", eventDetail: "The comparison is persisted and matches the current run pair.", comparisonId: comparison.comparisonId, consensusOutcome: "MAJORITY_AGREE", executionResult: "FINISHED_WITH_RETURN", persistedOnchain: true, relation: comparison.relation, safeToCompare: comparison.safeToCompare, safeToAggregate: comparison.safeToAggregate, outcomeMapping: comparison.outcomeMapping, reasonCodes: comparison.reasonCodes, materialDifferences: comparison.materialDifferences });
-  }
-
-  async function reconcileComparison(client: ReturnType<typeof createClient>, hash: Hash) {
-    await waitForTransaction(client as never, hash, "Comparison");
-    await verifyComparisonReadback(client);
+    return reconcileNow();
   }
 
   async function startRun() {
@@ -266,20 +202,29 @@ export function ComparisonRunClient({ initialRun }: { initialRun: ComparisonRun 
     setBusy(true);
     setMessage("");
     try {
+      let currentRun = await reconcileNow();
+      if (currentRun.persistedOnchain || ["MAJORITY_DISAGREE", "CONSENSUS_REJECTED", "EXECUTION_FAILED"].includes(currentRun.state)) return;
       const config = runtimeConfig;
       if (!config || config.contractAddress !== run.contractAddress) throw new Error("Runtime contract does not match the contract recorded for this run.");
       const connected = await connect();
       const client = createClient({ chain: networkChain(config.network), endpoint: config.rpcUrl, account: connected.account as `0x${string}`, provider: connected.wallet as never });
-      await registerSnapshot(client, run.snapshots[0], run.registerArgs[0], 0);
-      await registerSnapshot(client, run.snapshots[1], run.registerArgs[1], 1);
-      let comparisonHash = run.comparisonTx as Hash | undefined;
-      if (!comparisonHash) {
-        await transition("WAITING_SIGNATURE", "Waiting for wallet signature for the comparison transaction.");
-        comparisonHash = await client.writeContract({ address: run.contractAddress as `0x${string}`, functionName: "compare_markets", args: [run.snapshotAId, run.snapshotBId, run.comparisonVersion] as never[], value: 0n }) as Hash;
-        await updateRun({ comparisonTx: comparisonHash, state: "SUBMITTED", eventState: "SUBMITTED", eventDetail: "Comparison transaction submitted; hash persisted before consensus monitoring." });
+      for (const index of [0, 1] as const) {
+        const expectedState = index === 0 ? "SNAPSHOT_A_VERIFIED" : "SNAPSHOT_B_VERIFIED";
+        if (currentRun.state === expectedState || (index === 1 && currentRun.state === "PERSISTED_ONCHAIN")) continue;
+        const next = await registerSnapshot(client, currentRun.snapshots![index], currentRun.registerArgs![index], index, currentRun);
+        if (!next) return;
+        currentRun = next;
+        if (currentRun.state !== expectedState) return;
       }
-      await reconcileComparison(client, comparisonHash);
-      setMessage("Run verified successfully. The comparison is now a persisted onchain result.");
+      currentRun = await reconcileNow();
+      if (currentRun.persistedOnchain) return;
+      let comparisonHash = currentRun.comparisonTx as Hash | undefined;
+      if (!comparisonHash) {
+        comparisonHash = await client.writeContract({ address: currentRun.contractAddress as `0x${string}`, functionName: "compare_markets", args: [currentRun.snapshotAId, currentRun.snapshotBId, currentRun.comparisonVersion] as never[], value: 0n }) as Hash;
+        currentRun = await updateRun({ comparisonTx: comparisonHash });
+      }
+      if (currentRun.persistedOnchain) setMessage("Run verified successfully. The comparison is now a persisted onchain result.");
+      else setMessage("Comparison submitted. Verification will continue automatically using the same transaction hash.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The run could not continue. Its existing hashes were preserved.");
     } finally {
@@ -287,44 +232,24 @@ export function ComparisonRunClient({ initialRun }: { initialRun: ComparisonRun 
     }
   }
 
-  const reconcile = useCallback(async () => {
-    if (reconcileLock.current || !runtimeConfig) return;
-    const hash = run.comparisonTx || run.snapshotBTx || run.snapshotATx;
-    if (!hash || run.persistedOnchain || run.state === "MAJORITY_DISAGREE" || run.state === "CONSENSUS_REJECTED") return;
-    reconcileLock.current = true;
-    try {
-      const client = await readClient(runtimeConfig);
-      const observed = await fullTransaction(client as unknown as TransactionReader, hash as Hash);
-      const classification = classifyTransaction(observed);
-      if (classification.state === "consensus-error") await transition("MAJORITY_DISAGREE", "The existing transaction was rejected by consensus. No new transaction was submitted.", { consensusOutcome: classification.consensusResultName, executionResult: classification.executionResultName, persistedOnchain: false, failureReason: "Consensus rejected the proposal; no onchain comparison was persisted." });
-      else if (classification.state === "execution-error") await transition("EXECUTION_FAILED", "The existing transaction finalized with an execution error. No new transaction was submitted.", { executionResult: classification.executionResultName, persistedOnchain: false });
-      else if (classification.state === "success") {
-        await transition("FINALIZED_VERIFYING", "The existing transaction finalized; read-back verification is in progress.", { executionResult: classification.executionResultName });
-        if (run.comparisonTx === hash) await verifyComparisonReadback(client);
-        else await verifySnapshotReadback(client, run.snapshotBTx === hash ? 1 : 0);
-      }
-      else await transition("VERIFICATION_PENDING", "The existing transaction is not fully verifiable yet. No new transaction was submitted.");
-    } catch {
-      setMessage("Verification is temporarily unavailable. The existing transaction hash remains preserved; do not submit again.");
-    } finally {
-      reconcileLock.current = false;
-    }
-  // The reconciliation callback intentionally captures this run snapshot; live actions
-  // persist their own transitions and must not trigger a second reconciliation loop.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [run, runtimeConfig]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => void reconcile(), 0);
-    return () => window.clearTimeout(timer);
-  }, [reconcile]);
-
   async function refreshRun() {
     setRefreshing(true);
     try {
       const response = await fetch(`/api/comparisons/runs/${run.runId}`, { cache: "no-store" });
       const body = (await response.json()) as { run?: ComparisonRun };
       if (response.ok && body.run) setRun(body.run);
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  async function retryVerification() {
+    setRefreshing(true);
+    try {
+      const next = await reconcileNow();
+      setMessage(next.persistedOnchain ? "Run verified successfully. The comparison is now a persisted onchain result." : next.failureReason || "Verification retried against the same transaction hash; no new transaction was submitted.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Verification is temporarily unavailable. Your submitted transaction has not been resubmitted.");
     } finally {
       setRefreshing(false);
     }
@@ -347,13 +272,13 @@ export function ComparisonRunClient({ initialRun }: { initialRun: ComparisonRun 
         {message && <div className="run-alert" role="alert"><CircleAlert size={17} aria-hidden="true" /><span>{message}</span></div>}
         <div className="run-grid">
           <div>
-            <section className="run-section"><div className="section-heading compact-heading"><div><div className="section-kicker">EVIDENCE FRAME</div><h2>Two published rules.</h2></div><p>The run keeps the exact prepared pair beside every lifecycle event. Offchain evidence is descriptive; onchain state remains authoritative.</p></div><div className="run-markets">{run.snapshots?.map((market, index) => <article className="run-market" key={market.snapshotId}><div className="run-market-label"><span>MARKET {index === 0 ? "A" : "B"}</span><span>v{market.version}</span></div><h3>{market.title}</h3><p>{market.description}</p><dl className="data-list"><div><dt>Platform</dt><dd>{market.providerLabel}</dd></div><div><dt>Outcomes</dt><dd>{market.outcomes.join(" / ")}</dd></div><div><dt>Window</dt><dd>{formatDate(market.openTime)} → {formatDate(market.closeTime)}</dd></div><div><dt>Source hash</dt><dd className="mono">{shortHash(market.sourceHash, 8)}</dd></div></dl></article>) || <div className="run-market-placeholder"><ShieldAlert size={20} aria-hidden="true" /><p>Snapshot evidence is available from the current onchain IDs above.</p></div>}</div></section>
+            <section className="run-section"><div className="section-heading compact-heading"><div><div className="section-kicker">EVIDENCE FRAME</div><h2>Two published rules.</h2></div><p>The run keeps the exact prepared pair beside every lifecycle event. Offchain evidence is descriptive; onchain state remains authoritative.</p></div><div className="run-markets">{run.snapshots?.map((market, index) => <article className="run-market" key={market.snapshotId}><div className="run-market-label"><span>MARKET {index === 0 ? "A" : "B"}</span><span>v{market.version}</span></div><h3>{market.title}</h3><p>{market.description}</p><dl className="data-list"><div><dt>Platform</dt><dd>{market.providerLabel}</dd></div><div><dt>Outcomes</dt><dd>{market.outcomes.join(" / ")}</dd></div><div><dt>Window</dt><dd>{formatDate(market.openTime)} → {formatDate(market.closeTime)}</dd></div><div><dt>Source hash</dt><dd className="mono">{shortHash(market.sourceHash, 8)}</dd></div><div><dt>Source evidence hash</dt><dd className="mono">{market.sourceEvidenceHash ? shortHash(market.sourceEvidenceHash, 8) : "Generated onchain"}</dd></div></dl></article>) || <div className="run-market-placeholder"><ShieldAlert size={20} aria-hidden="true" /><p>Snapshot evidence is available from the current onchain IDs above.</p></div>}</div></section>
             <section className="run-section"><div className="section-kicker">CONSENSUS TIMELINE</div><h2>Protocol truth, in order.</h2><div className="run-timeline" aria-label="Comparison run lifecycle">{run.events.map((event, index) => <div className={eventTone(event.state)} key={`${event.at}-${index}`}><div className="run-event-marker">{event.state.includes("REJECTED") || event.state.includes("DISAGREE") ? <ShieldAlert size={14} aria-hidden="true" /> : event.state.includes("VERIFIED") || event.state.includes("PERSISTED") ? <Check size={14} aria-hidden="true" /> : <span>{String(index + 1).padStart(2, "0")}</span>}</div><div><strong>{runLabel(event.state)}</strong><time>{formatDate(event.at)}</time>{event.detail && <p>{event.detail}</p>}</div></div>)}</div></section>
           </div>
           <aside className="run-aside">
-            <section className="protocol-panel run-panel"><div className="section-kicker">RUN CONTROL</div><h2>{forensic ? "Forensic record" : "Resume safely"}</h2><p>{forensic ? "This real attempt is preserved as application history. The leader returned a proposal, validators rejected consensus, and no onchain comparison exists." : "This page owns the wallet and transaction lifecycle. Refresh, navigation, and PM2 restarts recover from the server record."}</p>{!forensic && <div className="form-actions"><button className="button button-primary" type="button" onClick={() => void startRun()} disabled={busy || !canStart || wrongNetwork || run.persistedOnchain || run.state === "MAJORITY_DISAGREE"}>{busy ? "Working the run…" : wrongNetwork ? "Wrong network" : run.persistedOnchain ? "Run verified" : run.state === "MAJORITY_DISAGREE" ? "Consensus rejected" : "Connect wallet & begin run"} <Wallet size={15} aria-hidden="true" /></button></div>}<dl className="data-list instrument-data"><div><dt>Wallet</dt><dd className="mono">{account ? shortHash(account, 7) : "Not connected"}</dd></div><div><dt>Network</dt><dd>{run.network} · {run.chainId}</dd></div><div><dt>Contract</dt><dd className="mono">{shortHash(run.contractAddress, 9)}</dd></div><div><dt>Persistence</dt><dd>{run.persistedOnchain ? "Onchain + run record" : "Run record only"}</dd></div></dl></section>
+            <section className="protocol-panel run-panel"><div className="section-kicker">RUN CONTROL</div><h2>{forensic ? "Forensic record" : "Resume safely"}</h2><p>{forensic ? "This real attempt is preserved as application history. The leader returned a proposal, validators rejected consensus, and no onchain comparison exists." : "This page owns the wallet and transaction lifecycle. Refresh, navigation, and PM2 restarts recover from the server record."}</p>{!forensic && <div className="form-actions"><button className="button button-primary" type="button" onClick={() => void startRun()} disabled={busy || !canStart || wrongNetwork || terminal}>{busy ? "Working the run…" : wrongNetwork ? "Wrong network" : run.persistedOnchain ? "Run verified" : terminal ? "Run is terminal" : "Connect wallet & begin run"} <Wallet size={15} aria-hidden="true" /></button></div>}<dl className="data-list instrument-data"><div><dt>Wallet</dt><dd className="mono">{account ? shortHash(account, 7) : "Not connected"}</dd></div><div><dt>Network</dt><dd>{run.network} · {run.chainId}</dd></div><div><dt>Contract</dt><dd className="mono">{shortHash(run.contractAddress, 9)}</dd></div><div><dt>Persistence</dt><dd>{run.persistedOnchain ? "Onchain + run record" : "Run record only"}</dd></div></dl></section>
             <section className="run-panel result-card"><div className="section-kicker">TRANSACTION REFERENCES</div>{(["snapshotATx", "snapshotBTx", "comparisonTx"] as const).map((field) => { const value = run[field]; return <div className="reference-row" key={field}><span>{field === "snapshotATx" ? "Snapshot A" : field === "snapshotBTx" ? "Snapshot B" : "Comparison"}</span>{value ? <div><button className="hash-button mono" type="button" onClick={() => void copy(value, field)} title="Copy transaction hash">{copied === field ? "Copied" : shortHash(value, 9)} <Copy size={13} aria-hidden="true" /></button>{explorer && <a className="hash-external" href={`${explorer.replace(/\/$/, "")}/tx/${value}`} target="_blank" rel="noreferrer" aria-label={`Open ${field} in explorer`}><ExternalLink size={13} aria-hidden="true" /></a>}</div> : <em>Not submitted</em>}</div>; })}</section>
-            {run.state === "MAJORITY_DISAGREE" && <section className="callout callout-risk"><strong>CONSENSUS NOT ACCEPTED</strong><p>Validators did not accept the leader proposal. Funds and onchain comparison state were not created by this run. Retrying the same logical operation requires a separately reviewed contract decision.</p>{run.leaderRelation && <p className="run-proposal">Leader proposal: <strong>{runLabel(run.leaderRelation)}</strong></p>}</section>}
+            {["MAJORITY_DISAGREE", "CONSENSUS_REJECTED", "EXECUTION_FAILED", "RPC_UNAVAILABLE", "VERIFICATION_PENDING"].includes(run.state) && <section className={`callout ${run.state === "MAJORITY_DISAGREE" || run.state === "CONSENSUS_REJECTED" || run.state === "EXECUTION_FAILED" ? "callout-risk" : "callout-dark"}`}><strong>{run.state === "EXECUTION_FAILED" ? "EXECUTION FAILED" : run.state === "RPC_UNAVAILABLE" ? "VERIFICATION UNAVAILABLE" : run.state === "VERIFICATION_PENDING" ? "VERIFICATION PENDING" : "CONSENSUS NOT ACCEPTED"}</strong><p>{run.failureReason || (run.state === "VERIFICATION_PENDING" ? "The submitted transaction has not been fully verified yet. Your transaction has not been resubmitted." : run.state === "RPC_UNAVAILABLE" ? "Verification is temporarily unavailable. Your submitted transaction has not been resubmitted." : "GenLayer validators did not accept the proposed semantic relationship, so no comparison was persisted onchain.")}</p>{(run.state === "MAJORITY_DISAGREE" || run.state === "CONSENSUS_REJECTED" || run.state === "EXECUTION_FAILED") && <dl className="data-list"><div><dt>Persisted onchain</dt><dd>NO</dd></div><div><dt>Run remains auditable</dt><dd>YES</dd></div></dl>}{run.leaderRelation && <p className="run-proposal">Leader proposal: <strong>{runLabel(run.leaderRelation)}</strong></p>}{!forensic && (run.comparisonTx || run.snapshotATx || run.snapshotBTx) && !["MAJORITY_DISAGREE", "CONSENSUS_REJECTED", "EXECUTION_FAILED", "PERSISTED_ONCHAIN"].includes(run.state) && <button className="button button-secondary" type="button" onClick={() => void retryVerification()} disabled={refreshing}>{refreshing ? "Verifying…" : "Retry verification"}</button>}</section>}
           </aside>
         </div>
         {run.persistedOnchain && run.comparisonId && <section className="run-result-strip"><div><div className="section-kicker">PERSISTED RESULT</div><div className="run-relationship-mini">{relationshipSummary}</div><h2>{runLabel(run.relation || "COMPARISON")}</h2><p>{run.safeToCompare ? "Safe to compare" : "Not safe to compare"} · {run.safeToAggregate ? "safe to aggregate" : "aggregation not authorized"}</p></div><Link className="button button-secondary" href={`/comparisons/${run.comparisonId}`}>Open result <ExternalLink size={15} aria-hidden="true" /></Link></section>}

@@ -3,6 +3,7 @@ export type PublicConfig = {
   rpcUrl: string;
   chainId: number;
   contractAddress: string;
+  protocol: string;
   explorerUrl: string;
   studioUrl: string;
 };
@@ -14,6 +15,7 @@ export function parsePublicConfig(value: unknown): PublicConfig {
   const rpcUrl = config.rpcUrl;
   const chainId = config.chainId;
   const contractAddress = config.contractAddress;
+  const protocol = config.protocol;
   const explorerUrl = config.explorerUrl;
   const studioUrl = config.studioUrl;
   if (
@@ -23,10 +25,11 @@ export function parsePublicConfig(value: unknown): PublicConfig {
     !Number.isInteger(chainId) ||
     typeof contractAddress !== "string" ||
     !/^0x[a-fA-F0-9]{40}$/.test(contractAddress) ||
+    protocol !== "eventum/1.1.1" ||
     typeof explorerUrl !== "string" ||
     typeof studioUrl !== "string"
   ) throw new Error("Eventum runtime configuration is invalid.");
-  return { network, rpcUrl, chainId, contractAddress, explorerUrl, studioUrl };
+  return { network, rpcUrl, chainId, contractAddress, protocol, explorerUrl, studioUrl };
 }
 
 export async function loadPublicConfig(): Promise<PublicConfig> {

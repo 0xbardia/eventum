@@ -1,8 +1,8 @@
 # Intelligent Contract
 
 Source: [`contracts/eventum.py`](../contracts/eventum.py)  
-SHA-256: `f92810de3e381bea9938fc38c55b2ba0625274f239ecf617905539019f5496d4`  
-Protocol version: `eventum/1.0.0`  
+SHA-256: `4c198184c7a48485cba207c5f6037cd701e27c69c4ab76192a5bfd76803434d5`
+Protocol version: `eventum/1.1.1`
 Comparison version: `1.0.0`
 
 ## State
@@ -67,10 +67,11 @@ about event, actor, action, time, threshold, authority, exceptions, and
 outcomes. Contract validation rejects unknown enums, unknown outcomes,
 unbounded arrays/text, invalid mappings, and invented canonical keys.
 
-The contract derives canonical identity only when both supplied hints match and
-the relation is `EQUIVALENT`. Aggregation remains false unless both outcome
-spaces have equal cardinality and the mapping is a complete one-to-one
-bijection covering the full target outcome space.
+The v1.1.1 contract derives canonical event identity from corroborated source
+evidence and stores `source_evidence_hash`; the caller-provided hint is not
+treated as authoritative. Aggregation remains false unless both outcome spaces
+have equal cardinality and the mapping is a complete one-to-one bijection
+covering the full target outcome space.
 
 ## Safe failures
 

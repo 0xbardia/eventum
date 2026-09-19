@@ -11,6 +11,7 @@ export async function ContractProof() {
     chainId: 0,
     rpcUrl: "",
     contractAddress: "",
+    protocol: "eventum/1.1.1",
     checkedAt: new Date().toISOString(),
     contractReachable: false,
     error: error instanceof Error ? error.message : "Status unavailable",

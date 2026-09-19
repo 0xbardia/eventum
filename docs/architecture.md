@@ -6,7 +6,7 @@ protocol authority.
 ```text
 Polymarket
   → Gamma provider adapter
-  → normalized evidence + source hash
+  → normalized evidence + submitted source hash
   → Comparison Run (durable application record)
   → browser wallet on Studionet
   → register_market_snapshot
@@ -32,6 +32,13 @@ transaction hashes, lifecycle events, and recovery state across refreshes and
 PM2 restarts. It is an application audit trail, not a substitute for chain
 state.
 
+New runs receive a cryptographically random HttpOnly, Secure production session
+cookie. Only its SHA-256 binding is stored with the run. PATCH requests require
+that same session; historical runs without a binding remain public and
+read-only. Public PATCH accepts transaction-hash claims only. The server checks
+the chain, current contract, transaction stage, and contract read-back before
+populating consensus, persistence, relation, safety, or comparison fields.
+
 ### Browser wallet
 
 The wallet signs the two snapshot writes and the comparison write. The runtime
@@ -44,6 +51,10 @@ server runtime config. The browser never receives deployment secrets.
 IDs, evaluates quoted evidence with GenLayer, validates structured decision
 fields, persists accepted comparisons, and exposes public reads. It is the
 authority for finalized snapshot and comparison state.
+
+The v1.1.1 contract derives `canonical_event_hint` from corroborated source
+evidence and records `source_evidence_hash`; the application always replaces
+offchain previews with contract read-back after registration.
 
 ### Graph
 

@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { RELATIONS } from "./types";
 
 export const resolveMarketSchema = z.object({
   url: z.string().trim().min(1).max(2048),
@@ -11,8 +10,6 @@ export const prepareComparisonSchema = z.object({
 }).strict();
 
 const hexId = z.string().regex(/^[a-f0-9]{64}$/i);
-const hexAddress = z.string().regex(/^0x[a-f0-9]{40}$/i);
-const relationSchema = z.enum(RELATIONS);
 const publicSnapshotSchema = z.object({
   snapshotId: hexId,
   marketKey: hexId,
@@ -33,6 +30,7 @@ const publicSnapshotSchema = z.object({
   sourceHash: hexId,
   normalizedFacts: z.record(z.string().max(64), z.unknown()),
   canonicalEventHint: z.string().max(160),
+  sourceEvidenceHash: hexId.optional(),
   providerLabel: z.literal("Polymarket Gamma API"),
   authority: z.enum(["onchain", "offchain-preview"]),
 }).strict().superRefine((snapshot, context) => {
@@ -52,30 +50,12 @@ export const createComparisonRunSchema = z.object({
   comparisonVersion: z.literal("1.0.0"),
   snapshots: z.array(publicSnapshotSchema).length(2),
   registerArgs: z.array(registerArgsSchema).length(2),
-  walletAddress: hexAddress.optional(),
-  contractAddress: hexAddress,
-  network: z.enum(["studionet", "bradbury"]),
-  chainId: z.number().int().positive(),
 }).strict();
 
+const transactionHash = z.string().regex(/^0x[a-f0-9]{64}$/i);
+
 export const updateComparisonRunSchema = z.object({
-  state: z.string().min(1).max(64).optional(),
-  walletAddress: hexAddress.optional(),
-  snapshotATx: z.string().max(100).optional(),
-  snapshotBTx: z.string().max(100).optional(),
-  comparisonTx: z.string().max(100).optional(),
-  comparisonId: hexId.optional(),
-  consensusOutcome: z.string().max(64).optional(),
-  executionResult: z.string().max(64).optional(),
-  persistedOnchain: z.boolean().optional(),
-  relation: relationSchema.optional(),
-  leaderRelation: relationSchema.optional(),
-  safeToCompare: z.boolean().optional(),
-  safeToAggregate: z.boolean().optional(),
-  outcomeMapping: z.record(z.string().max(64), z.array(z.string().max(64)).max(16)).optional(),
-  reasonCodes: z.array(z.string().max(64)).max(8).optional(),
-  materialDifferences: z.array(z.string().max(280)).max(8).optional(),
-  failureReason: z.string().max(1000).optional(),
-  eventState: z.string().min(1).max(64).optional(),
-  eventDetail: z.string().max(500).optional(),
+  snapshotATx: transactionHash.optional(),
+  snapshotBTx: transactionHash.optional(),
+  comparisonTx: transactionHash.optional(),
 }).strict();

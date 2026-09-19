@@ -57,8 +57,9 @@ fee/transaction behavior should be re-profiled when the network or SDK changes.
 
 ## Current verified deployment
 
-- address: `0xB4260CDFf766Bf56C2C623A748082a51932870F8`
-- source SHA-256: `f92810de3e381bea9938fc38c55b2ba0625274f239ecf617905539019f5496d4`
+- address: `0x96F23489C251135965b13303A991b2B9579bdF19`
+- protocol: `eventum/1.1.1`
+- source SHA-256: `4c198184c7a48485cba207c5f6037cd701e27c69c4ab76192a5bfd76803434d5`
 - deployment transaction: `0x06e4b609359b0d2c06c76523de261f5519ac41496966d25970f7024af44b8a1a`
 - deployment status/result: `FINALIZED / MAJORITY_AGREE`
 - deployment execution hash: `0xb517ce1138ca86fd753e4570ca277c5a1b8219e03807e257d6df9c101b3ee9ba`

@@ -19,7 +19,7 @@ function actual() {
     resolution_rules: expected.resolutionRules, resolution_source: expected.resolutionSource,
     open_time: expected.openTime, close_time: expected.closeTime, resolution_deadline: expected.resolutionDeadline,
     clarifications: expected.clarifications, retrieved_at: expected.retrievedAt, source_hash: expected.sourceHash,
-    canonical_event_hint: expected.canonicalEventHint, outcomes: expected.outcomes, version: 1,
+    canonical_event_hint: expected.canonicalEventHint, source_evidence_hash: "e".repeat(64), outcomes: expected.outcomes, version: 1,
   };
 }
 

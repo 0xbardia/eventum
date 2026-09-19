@@ -14,7 +14,8 @@ export function MarketPreview({ market }: { market: MarketSnapshot }) {
         <div><dt>Close</dt><dd>{formatDate(market.closeTime)}</dd></div>
         <div><dt>Resolution source</dt><dd>{market.resolutionSource || "Not published"}</dd></div>
         <div><dt>Snapshot</dt><dd className="mono">{shortHash(market.snapshotId)}</dd></div>
-        <div><dt>Evidence hash</dt><dd className="mono">{shortHash(market.sourceHash)}</dd></div>
+        <div><dt>Submitted source hash</dt><dd className="mono">{shortHash(market.sourceHash)}</dd></div>
+        <div><dt>Source evidence hash</dt><dd className="mono">{market.sourceEvidenceHash ? shortHash(market.sourceEvidenceHash) : "Generated onchain"}</dd></div>
       </dl>
       <a className="source-link" href={market.sourceUrl} target="_blank" rel="noreferrer">Open published source <ExternalLink size={13} aria-hidden="true" /></a>
     </article>

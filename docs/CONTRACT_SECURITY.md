@@ -43,9 +43,9 @@ attempt to infer unsafe graph closure.
 
 ## Review result
 
-The current operator deployment is `0xB4260CDFf766Bf56C2C623A748082a51932870F8`
-with source SHA-256
-`f92810de3e381bea9938fc38c55b2ba0625274f239ecf617905539019f5496d4`.
+The current operator deployment is `0x96F23489C251135965b13303A991b2B9579bdF19`
+for protocol `eventum/1.1.1`, with source SHA-256
+`4c198184c7a48485cba207c5f6037cd701e27c69c4ab76192a5bfd76803434d5`.
 Earlier deployment values in the historical paragraphs below are retained for
 audit lineage and are not active runtime targets.
 

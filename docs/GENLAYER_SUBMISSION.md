@@ -45,14 +45,13 @@ Outcome Resolution
 
 ## CONTRACT
 
-- address: `0xB4260CDFf766Bf56C2C623A748082a51932870F8`
+- address: `0x96F23489C251135965b13303A991b2B9579bdF19`
 - network: Studionet, chain `61999`
 - RPC: `https://studio.genlayer.com/api`
-- source hash: `f92810de3e381bea9938fc38c55b2ba0625274f239ecf617905539019f5496d4`
-- deployment transaction: `0x06e4b609359b0d2c06c76523de261f5519ac41496966d25970f7024af44b8a1a`
-- deployment result: `FINALIZED / MAJORITY_AGREE`
-- deployment execution hash: `0xb517ce1138ca86fd753e4570ca277c5a1b8219e03807e257d6df9c101b3ee9ba`
-- verified reads: 11/11 against the populated deployment
+- protocol: `eventum/1.1.1`
+- source hash: `4c198184c7a48485cba207c5f6037cd701e27c69c4ab76192a5bfd76803434d5`
+- deployment status: final and certified
+- source-bound registration: contract-derived `canonical_event_hint` and `source_evidence_hash`
 - meaningful writes: `register_market_snapshot`, `compare_markets`
 - write verification: the live snapshot and comparison evidence is maintained
   in the current release artifacts and is verifiable through the public app

@@ -11,8 +11,10 @@ type PersistedCache = {
   marketSnapshots: Record<string, { evidence: MarketEvidence; version: number }>;
   comparisonCache: Record<string, { comparison: Comparison; transactionHash?: string; updatedAt: string }>;
   transactions: Record<string, { operation: string; lifecycle: string; result?: unknown; errorCode?: string; updatedAt: string }>;
-  comparisonRuns?: Record<string, ComparisonRun>;
+  comparisonRuns?: Record<string, StoredComparisonRun>;
 };
+
+export type StoredComparisonRun = ComparisonRun & { ownerSessionHash?: string };
 
 const globalCache = globalThis as unknown as { eventumCache?: { path: string; data: PersistedCache } };
 
@@ -81,6 +83,12 @@ function publicSnapshot(evidence: MarketEvidence, snapshotId: string, version: n
   };
 }
 
+function publicRun(run: StoredComparisonRun): ComparisonRun {
+  const { ownerSessionHash, ...visible } = run;
+  void ownerSessionHash;
+  return visible;
+}
+
 function contractIdentity(evidence: MarketEvidence) {
   return {
     market_key: sha256(`eventum:market:v1|${evidence.platform.toLowerCase()}|${evidence.platformMarketId}`),
@@ -104,8 +112,27 @@ function contractIdentity(evidence: MarketEvidence) {
   };
 }
 
+/** Settlement-material identity only. Volatile retrieval metadata is excluded. */
+export function snapshotIdentityPayload(evidence: MarketEvidence) {
+  return {
+    canonical_event_hint: evidence.canonicalEventHint,
+    clarifications: evidence.clarifications,
+    close_time: evidence.closeTime,
+    description: evidence.description,
+    open_time: evidence.openTime,
+    outcomes: evidence.outcomes,
+    platform: evidence.platform.toLowerCase(),
+    platform_market_id: evidence.platformMarketId,
+    resolution_deadline: evidence.resolutionDeadline,
+    resolution_rules: evidence.resolutionRules,
+    resolution_source: evidence.resolutionSource,
+    source_url: evidence.sourceUrl,
+    title: evidence.title,
+  };
+}
+
 export function predictedSnapshotId(evidence: MarketEvidence): string {
-  return sha256(`eventum:snapshot:v1|${canonicalJson(contractIdentity(evidence))}`);
+  return sha256(`eventum:snapshot:v1|${canonicalJson(snapshotIdentityPayload(evidence))}`);
 }
 
 export function registerArgs(evidence: MarketEvidence): string[] {
@@ -169,9 +196,9 @@ export function saveTransaction(hash: string, operation: string, lifecycle: stri
   persist(databasePath(), cache);
 }
 
-export function createComparisonRun(input: Omit<ComparisonRun, "runId" | "createdAt" | "updatedAt" | "state" | "events" | "persistedOnchain"> & { state?: string; events?: ComparisonRunEvent[] }) {
+export function createComparisonRun(input: Omit<ComparisonRun, "runId" | "createdAt" | "updatedAt" | "state" | "events" | "persistedOnchain"> & { state?: string; events?: ComparisonRunEvent[] }, ownerSessionHash?: string) {
   const now = new Date().toISOString();
-  const run: ComparisonRun = {
+  const run: StoredComparisonRun = {
     ...input,
     runId: randomUUID(),
     createdAt: now,
@@ -179,27 +206,33 @@ export function createComparisonRun(input: Omit<ComparisonRun, "runId" | "create
     state: input.state ?? "PREPARED",
     persistedOnchain: false,
     events: input.events ?? [{ state: input.state ?? "PREPARED", at: now }],
+    ...(ownerSessionHash ? { ownerSessionHash } : {}),
   };
   const cache = getDb();
   cache.comparisonRuns ??= {};
   cache.comparisonRuns[run.runId] = run;
   persist(databasePath(), cache);
-  return run;
+  return publicRun(run);
 }
 
 export function getComparisonRun(runId: string): ComparisonRun | null {
+  const run = getDb().comparisonRuns?.[runId];
+  return run ? publicRun(run) : null;
+}
+
+export function getComparisonRunRecord(runId: string): StoredComparisonRun | null {
   return getDb().comparisonRuns?.[runId] ?? null;
 }
 
 export function listComparisonRuns(): ComparisonRun[] {
-  return Object.values(getDb().comparisonRuns ?? {}).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return Object.values(getDb().comparisonRuns ?? {}).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map(publicRun);
 }
 
 export function updateComparisonRun(runId: string, patch: Partial<ComparisonRun>, event?: ComparisonRunEvent): ComparisonRun {
   const cache = getDb();
   const current = cache.comparisonRuns?.[runId];
   if (!current) throw new Error("COMPARISON_RUN_NOT_FOUND");
-  const updated: ComparisonRun = {
+  const updated: StoredComparisonRun = {
     ...current,
     ...patch,
     runId: current.runId,
@@ -209,9 +242,10 @@ export function updateComparisonRun(runId: string, patch: Partial<ComparisonRun>
   };
   cache.comparisonRuns![runId] = updated;
   persist(databasePath(), cache);
-  return updated;
+  return publicRun(updated);
 }
 
+// Historical forensic run from a superseded deployment; public and read-only.
 export const FORENSIC_RUN_ID = "forensic-0x2a2777166e8ea1ef3c8d2c8090d3e49694f6efc5ceffe7f045e8a2d8126ffc87";
 
 export function ensureForensicComparisonRun() {

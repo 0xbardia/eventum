@@ -10,7 +10,6 @@ export function assertSnapshotReadback(value: unknown, expected: MarketSnapshot)
   if (!actual || Array.isArray(actual) || typeof actual !== "object") throw new Error("The registered snapshot read-back was invalid.");
   const item = actual as Record<string, unknown>;
   const expectedFields: Array<[string, string]> = [
-    ["snapshot_id", expected.snapshotId],
     ["platform", expected.platform],
     ["platform_market_id", expected.platformMarketId],
     ["source_url", expected.sourceUrl],
@@ -24,7 +23,6 @@ export function assertSnapshotReadback(value: unknown, expected: MarketSnapshot)
     ["clarifications", expected.clarifications],
     ["retrieved_at", expected.retrievedAt],
     ["source_hash", expected.sourceHash],
-    ["canonical_event_hint", expected.canonicalEventHint],
   ];
   for (const [field, expectedValue] of expectedFields) {
     if (String(item[field] ?? "") !== expectedValue) throw new Error(`Snapshot read-back mismatch: ${field}.`);
@@ -33,5 +31,8 @@ export function assertSnapshotReadback(value: unknown, expected: MarketSnapshot)
     throw new Error("Snapshot read-back mismatch: outcomes.");
   }
   if (!Number.isInteger(Number(item.version)) || Number(item.version) < 1) throw new Error("Snapshot read-back mismatch: version.");
+  if (!/^[a-f0-9]{64}$/i.test(String(item.snapshot_id || ""))) throw new Error("Snapshot read-back mismatch: snapshot_id.");
+  if (!/^[a-f0-9]{64}$/i.test(String(item.source_evidence_hash || ""))) throw new Error("Snapshot read-back mismatch: source_evidence_hash.");
+  if (typeof item.canonical_event_hint !== "string") throw new Error("Snapshot read-back mismatch: canonical_event_hint.");
   return item;
 }

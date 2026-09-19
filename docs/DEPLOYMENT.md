@@ -2,18 +2,17 @@
 
 ## Contract release
 
-The exact tested `contracts/eventum.py` source hash is recorded in
-`deployments/studionet.json`. The current finalized Studionet deployment is:
+The exact frozen `contracts/eventum.py` source hash is recorded in
+`deployments/studionet.json`. The current certified Studionet deployment is:
 
 ```text
-address: 0xB4260CDFf766Bf56C2C623A748082a51932870F8
+address: 0x96F23489C251135965b13303A991b2B9579bdF19
 network: studionet
 chain: 61999
+protocol: eventum/1.1.1
 rpc: https://studio.genlayer.com/api
-source sha256: f92810de3e381bea9938fc38c55b2ba0625274f239ecf617905539019f5496d4
-deployment tx: 0x06e4b609359b0d2c06c76523de261f5519ac41496966d25970f7024af44b8a1a
-deployment execution hash: 0xb517ce1138ca86fd753e4570ca277c5a1b8219e03807e257d6df9c101b3ee9ba
-status: FINALIZED / MAJORITY_AGREE
+source sha256: 4c198184c7a48485cba207c5f6037cd701e27c69c4ab76192a5bfd76803434d5
+status: FINAL / CERTIFIED
 ```
 
 The earlier `0x04435B28bA9c57A7abFA1eb6b804218fca67249c` deployment is retained
@@ -75,6 +74,10 @@ After a future contract deployment, update the canonical runtime variables to
 the new verified address, restart only `eventum`, and rerun the deployment
 provenance plus read/write verification gates. A rebuild is needed for code
 changes, not for a runtime address rotation. Never use a fallback address.
+
+The runtime config also exposes `eventum/1.1.1`; `/api/status` independently
+reads `get_protocol_version()` from the configured contract and reports the
+chain-derived value.
 
 ## Reverse proxy
 

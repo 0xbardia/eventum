@@ -22,6 +22,14 @@ report.
 - the distinction between an application Comparison Run and persisted onchain
   Comparison.
 
+Comparison Run mutation uses a server-issued random HttpOnly session cookie;
+the JSON store keeps only its SHA-256 binding. Historical runs without a
+binding are readable but read-only. Public PATCH accepts only transaction hash
+claims. The server independently checks the current chain and Eventum contract,
+then reads authoritative snapshot/comparison state before writing any
+chain-derived run fields. Verification retries the same hash and never
+resubmits a wallet transaction.
+
 Security fixes must preserve protocol truth and should include a focused
 regression test where practical. See `docs/THREAT_MODEL.md` and
 `docs/CONTRACT_SECURITY.md` for the current model and controls.

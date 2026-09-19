@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const EVENTUM_PROTOCOL = "eventum/1.1.1" as const;
+
 const addressPattern = /^0x[a-fA-F0-9]{40}$/;
 
 const envSchema = z.object({
@@ -116,6 +118,7 @@ export function getPublicConfig() {
     rpcUrl: config.GENLAYER_RPC_URL,
     chainId: config.GENLAYER_CHAIN_ID,
     contractAddress: config.GENLAYER_CONTRACT_ADDRESS,
+    protocol: EVENTUM_PROTOCOL,
     explorerUrl: config.GENLAYER_EXPLORER_URL,
     studioUrl: config.GENLAYER_STUDIO_URL,
   };

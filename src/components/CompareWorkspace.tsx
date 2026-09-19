@@ -75,9 +75,6 @@ export function CompareWorkspace() {
           comparisonVersion: prepared.comparisonVersion,
           snapshots: prepared.snapshots,
           registerArgs: prepared.registerArgs,
-          contractAddress: runtimeConfig.contractAddress,
-          network: runtimeConfig.network,
-          chainId: runtimeConfig.chainId,
         }),
       });
       const body = (await response.json()) as { run?: { runId?: string }; error?: { message?: string } };

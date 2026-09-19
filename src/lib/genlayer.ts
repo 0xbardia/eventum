@@ -1,7 +1,8 @@
 import { createClient } from "genlayer-js";
 import { localnet, studionet, testnetBradbury } from "genlayer-js/chains";
 import { TransactionHashVariant } from "genlayer-js/types";
-import { getConfig, getPublicConfig } from "./config";
+import type { Hash } from "genlayer-js/types";
+import { EVENTUM_PROTOCOL, getConfig, getPublicConfig } from "./config";
 import type { Comparison, ContractStatus, GraphEdge, MarketSnapshot } from "./types";
 
 type HexAddress = `0x${string}`;
@@ -64,6 +65,7 @@ function snapshotFromContract(raw: unknown): MarketSnapshot {
     clarifications: String(item.clarifications ?? ""),
     retrievedAt: String(item.retrieved_at),
     sourceHash: String(item.source_hash),
+    sourceEvidenceHash: item.source_evidence_hash ? String(item.source_evidence_hash) : undefined,
     normalizedFacts: (item.normalized_facts ?? {}) as Record<string, unknown>,
     canonicalEventHint: String(item.canonical_event_hint ?? ""),
     providerLabel: "Polymarket Gamma API",
@@ -111,6 +113,14 @@ export async function readContract(functionName: string, args: unknown[] = []): 
   }
 }
 
+export async function readTransaction(hash: string): Promise<unknown> {
+  try {
+    return await readClient().getTransaction({ hash: hash as Hash });
+  } catch {
+    throw new ContractError("TRANSACTION_READ_FAILED", "The transaction could not be read from GenLayer.", 502);
+  }
+}
+
 export async function getSnapshot(snapshotId: string): Promise<MarketSnapshot> {
   return snapshotFromContract(await readContract("get_market_snapshot", [snapshotId]));
 }
@@ -155,13 +165,15 @@ export async function getContractStatus(): Promise<ContractStatus> {
     chainId: publicConfig.chainId,
     rpcUrl: publicConfig.rpcUrl,
     contractAddress: publicConfig.contractAddress,
+    protocol: EVENTUM_PROTOCOL,
     checkedAt: new Date().toISOString(),
     contractReachable: false,
   } satisfies ContractStatus;
   if (!config.GENLAYER_CONTRACT_ADDRESS) return base;
   try {
     const version = await readContract("get_protocol_version");
-    return { ...base, protocolVersion: String(version), contractReachable: true };
+    const protocolVersion = String(version);
+    return { ...base, protocol: protocolVersion, protocolVersion, contractReachable: true };
   } catch (error) {
     return { ...base, error: error instanceof Error ? error.message : "Contract read failed." };
   }

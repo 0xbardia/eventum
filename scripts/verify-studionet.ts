@@ -63,7 +63,7 @@ async function main() {
         jsonSafeReturn: true,
       }));
       let valid = true;
-      if (functionName === "get_protocol_version") valid = actual === "eventum/1.0.0";
+      if (functionName === "get_protocol_version") valid = actual === "eventum/1.1.1";
       if (functionName === "get_market_count") valid = Number(actual) >= 2;
       if (functionName === "get_comparison_count") valid = Number(actual) >= 1;
       if (functionName === "get_market_snapshot") valid = object(actual).snapshot_id === snapshotA;

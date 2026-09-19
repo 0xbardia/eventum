@@ -6,9 +6,9 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { errorResponse, parseBody, rateLimit, rateLimitResponse, readJson } from "../../src/lib/api";
 import { getConfig } from "../../src/lib/config";
-import { dbHealth } from "../../src/lib/db";
+import { dbHealth, predictedSnapshotId, snapshotIdentityPayload } from "../../src/lib/db";
 import { canonicalJson } from "../../src/lib/hash";
-import { assertPublicHost, parsePolymarketUrl, resolvePolymarket } from "../../src/lib/providers/polymarket";
+import { assertPublicHost, canonicalEventHintFromParent, parsePolymarketUrl, resolvePolymarket } from "../../src/lib/providers/polymarket";
 import { createComparisonRunSchema, prepareComparisonSchema, resolveMarketSchema } from "../../src/lib/schemas";
 
 test("canonical JSON is deterministic and sorted", () => {
@@ -72,6 +72,8 @@ test("nested event URLs resolve the exact Gamma child market", async () => {
     assert.match(resolvedB.title, /77,500/);
     assert.equal(resolvedA.normalizedFacts.event_slug, eventSlug);
     assert.equal(resolvedB.normalizedFacts.event_slug, eventSlug);
+    assert.equal(resolvedA.canonicalEventHint, "polymarket:event:946004");
+    assert.equal(resolvedB.canonicalEventHint, resolvedA.canonicalEventHint);
 
     globalThis.fetch = (async () => new Response(JSON.stringify({ ...payloads.get(marketA), events: [{ slug: "different-event" }] }), { headers: { "content-type": "application/json" } })) as typeof fetch;
     await assert.rejects(
@@ -151,9 +153,6 @@ test("comparison runs accept version-zero offchain previews and reject them as o
     comparisonVersion: "1.0.0",
     snapshots: [snapshot, { ...snapshot, platformMarketId: "4190831" }],
     registerArgs: [Array.from({ length: 16 }, () => "arg"), Array.from({ length: 16 }, () => "arg")],
-    contractAddress: "0x1111111111111111111111111111111111111111",
-    network: "studionet",
-    chainId: 61999,
   });
   assert.equal(body.snapshots[0].version, 0);
   assert.throws(
@@ -269,4 +268,48 @@ test("provider byte limit, rate limit, config, cache, and safe errors fail close
       else process.env[name] = value;
     }
   }
+});
+
+test("canonical event hint is parent-backed and never fabricated", () => {
+  assert.equal(canonicalEventHintFromParent({ id: "946004", slug: "what-price-will-bitcoin-hit-in-september-2026" }), "polymarket:event:946004");
+  assert.equal(canonicalEventHintFromParent({ slug: "parent-event-slug" }), "polymarket:event:parent-event-slug");
+  assert.equal(canonicalEventHintFromParent({ id: "946004" }), canonicalEventHintFromParent({ id: "946004", slug: "ignored-when-id-present" }));
+  assert.equal(canonicalEventHintFromParent({ id: "111" }), "polymarket:event:111");
+  assert.notEqual(canonicalEventHintFromParent({ id: "111" }), canonicalEventHintFromParent({ id: "222" }));
+  assert.equal(canonicalEventHintFromParent(undefined), "");
+  assert.equal(canonicalEventHintFromParent({ id: "", slug: "" }), "");
+});
+
+test("snapshot identity ignores retrieved_at and volume but reacts to material settlement changes", () => {
+  const evidence = {
+    platform: "polymarket" as const,
+    platformMarketId: "4190830",
+    sourceUrl: "https://polymarket.com/market/example-market",
+    title: "Will Bitcoin dip to $80,000 in September?",
+    description: "Resolve from Binance 1m lows.",
+    outcomes: ["Yes", "No"],
+    resolutionRules: "Resolve from Binance 1m lows.",
+    resolutionSource: "https://www.binance.com/en/trade/BTC_USDT",
+    openTime: "2026-09-03",
+    closeTime: "2026-10-01",
+    resolutionDeadline: "",
+    clarifications: "",
+    retrievedAt: "2026-09-10T00:00:00Z",
+    sourceHash: "a".repeat(64),
+    normalizedFacts: { volume: 100, liquidity: 50 },
+    canonicalEventHint: "polymarket:event:946004",
+    providerLabel: "Polymarket Gamma API" as const,
+    rawPayload: { volume: 100 },
+  };
+  const identity = snapshotIdentityPayload(evidence);
+  assert.equal("retrieved_at" in identity, false);
+  assert.equal("source_hash" in identity, false);
+  assert.equal("normalized_facts" in identity, false);
+  const t1 = predictedSnapshotId(evidence);
+  const t2 = predictedSnapshotId({ ...evidence, retrievedAt: "2026-09-19T12:00:00Z", sourceHash: "b".repeat(64), normalizedFacts: { volume: 999, liquidity: 1 }, rawPayload: { volume: 999 } });
+  assert.equal(t1, t2);
+  assert.notEqual(t1, predictedSnapshotId({ ...evidence, title: "Will Bitcoin dip to $77,500 in September?" }));
+  assert.notEqual(t1, predictedSnapshotId({ ...evidence, outcomes: ["Yes", "No", "Invalid"] }));
+  assert.notEqual(t1, predictedSnapshotId({ ...evidence, resolutionSource: "https://example.com/other-source" }));
+  assert.notEqual(t1, predictedSnapshotId({ ...evidence, resolutionRules: "Different resolution rule." }));
 });

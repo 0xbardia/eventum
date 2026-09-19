@@ -204,7 +204,25 @@ function outcomesField(value: unknown): string[] {
   return normalized;
 }
 
-function marketFromPayload(payload: unknown, sourceUrl: string, eventSlug = "", eventTitle = ""): MarketEvidence {
+export function canonicalEventHintFromParent(parent: { id?: string; slug?: string } | undefined): string {
+  if (!parent) return "";
+  const identity = stringField(parent.id).trim() || stringField(parent.slug).trim();
+  if (!identity) return "";
+  const hint = `polymarket:event:${identity}`;
+  if (hint.length <= 160) return hint;
+  return `polymarket:event:${sha256(identity)}`;
+}
+
+function parentFromEvents(events: unknown, eventSlug = ""): Record<string, unknown> | undefined {
+  if (!Array.isArray(events)) return undefined;
+  const objects = events.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object");
+  if (eventSlug) {
+    return objects.find((item) => stringField(item.slug) === eventSlug);
+  }
+  return objects.length === 1 ? objects[0] : undefined;
+}
+
+function marketFromPayload(payload: unknown, sourceUrl: string, parentEvent?: Record<string, unknown>): MarketEvidence {
   if (!payload || typeof payload !== "object") throw new ProviderError("PROVIDER_INVALID_MARKET", "The provider returned an invalid market object.", 502);
   const market = payload as Record<string, unknown>;
   const platformMarketId = stringField(market.id);
@@ -222,6 +240,10 @@ function marketFromPayload(payload: unknown, sourceUrl: string, eventSlug = "", 
   }
   const resolutionSource = stringField(market.resolutionSource);
   const slug = stringField(market.slug);
+  const parent = parentEvent ?? parentFromEvents(market.events);
+  const eventSlug = stringField(parent?.slug);
+  const eventTitle = stringField(parent?.title);
+  const eventId = stringField(parent?.id);
   return {
     platform: "polymarket",
     platformMarketId,
@@ -242,11 +264,12 @@ function marketFromPayload(payload: unknown, sourceUrl: string, eventSlug = "", 
       market_slug: slug,
       event_slug: eventSlug,
       event_title: eventTitle,
+      ...(eventId ? { event_id: eventId } : {}),
       condition_id: stringField(market.conditionId),
       outcome_count: outcomes.length,
       resolution_source_present: Boolean(resolutionSource),
     },
-    canonicalEventHint: "",
+    canonicalEventHint: canonicalEventHintFromParent(parent ? { id: eventId, slug: eventSlug } : undefined),
     providerLabel: "Polymarket Gamma API",
     rawPayload: payload,
   };
@@ -267,7 +290,7 @@ export async function resolvePolymarket(rawUrl: string): Promise<MarketEvidence>
     if (stringField(market.slug) !== parsed.slug || !parentEvent) {
       throw new ProviderError("MARKET_EVENT_MISMATCH", "The requested Polymarket market is not part of that event.", 422);
     }
-    return marketFromPayload(payload, parsed.canonicalUrl, parsed.eventSlug, stringField(parentEvent.title));
+    return marketFromPayload(payload, parsed.canonicalUrl, parentEvent);
   }
   if (parsed.kind === "market") return marketFromPayload(payload, parsed.canonicalUrl);
   if (!payload || typeof payload !== "object") throw new ProviderError("PROVIDER_INVALID_EVENT", "The provider returned an invalid event object.", 502);
@@ -279,5 +302,5 @@ export async function resolvePolymarket(rawUrl: string): Promise<MarketEvidence>
   const market = markets[0] as Record<string, unknown>;
   const sourceHost = configuredHosts(config.POLYMARKET_ALLOWED_HOSTS)[0];
   const sourceUrl = `https://${sourceHost}/market/${stringField(market.slug, parsed.slug)}`;
-  return marketFromPayload(payload === market ? payload : market, sourceUrl, parsed.slug, stringField(event.title));
+  return marketFromPayload(payload === market ? payload : market, sourceUrl, event);
 }

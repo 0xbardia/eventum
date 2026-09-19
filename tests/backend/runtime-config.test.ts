@@ -15,6 +15,7 @@ test("runtime config exposes the canonical server contract", async () => {
       rpcUrl: "https://studio.genlayer.com/api",
       chainId: 61999,
       contractAddress: address,
+      protocol: "eventum/1.1.1",
       explorerUrl: "https://explorer-studio.genlayer.com/",
       studioUrl: "https://studio.genlayer.com/contracts",
     });

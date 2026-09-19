@@ -42,13 +42,21 @@ adjudication, records accepted results, and remains the protocol authority.
 |---|---|
 | Network | Studionet |
 | Chain | `61999` |
-| Protocol | `eventum/1.0.0` |
-| Contract | `0xB4260CDFf766Bf56C2C623A748082a51932870F8` |
-| Source SHA-256 | `f92810de3e381bea9938fc38c55b2ba0625274f239ecf617905539019f5496d4` |
+| Protocol | `eventum/1.1.1` |
+| Contract | `0x96F23489C251135965b13303A991b2B9579bdF19` |
+| Source SHA-256 | `4c198184c7a48485cba207c5f6037cd701e27c69c4ab76192a5bfd76803434d5` |
 
 Deployment lineage, source provenance, and historical superseded addresses are
 kept in [`deployments/studionet.json`](deployments/studionet.json). Historical
 addresses are not active runtime targets.
+
+Snapshot registration is source-bound: GenLayer corroborates the submitted
+Polymarket evidence, derives the canonical event identity, and stores its own
+`source_evidence_hash`. The browser's submitted `source_hash` and canonical
+hint are claims, not final provenance. The server binds each Comparison Run to
+an HttpOnly application session, verifies transaction claims against the
+current contract, and polls the same hash with bounded backoff. A rejected run
+remains auditable but cannot become a fabricated onchain comparison.
 
 ## Protocol model
 

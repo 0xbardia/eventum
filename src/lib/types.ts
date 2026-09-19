@@ -40,6 +40,7 @@ export type MarketSnapshot = Omit<MarketEvidence, "rawPayload"> & {
   version: number;
   marketKey: string;
   authority: "onchain" | "offchain-preview";
+  sourceEvidenceHash?: string;
 };
 
 export type OutcomeMapping = Record<string, string[]>;
@@ -120,6 +121,7 @@ export type ContractStatus = {
   chainId: number;
   rpcUrl: string;
   contractAddress: string;
+  protocol: string;
   protocolVersion?: string;
   contractReachable: boolean;
   checkedAt: string;

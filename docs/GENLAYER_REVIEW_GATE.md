@@ -2,7 +2,8 @@
 
 Reviewed 2026-09-09 UTC after the aggregation-safety redeployment and browser QA. This
 is an internal reviewer simulation, not an external approval. The current
-operator deployment is `0xB4260CDFf766Bf56C2C623A748082a51932870F8`; the final
+operator deployment is `0x96F23489C251135965b13303A991b2B9579bdF19` for protocol
+`eventum/1.1.1`; the final
 release status is maintained in `artifacts/final/final-release-gates.md`.
 
 | Challenge | Evidence-based answer | Result |

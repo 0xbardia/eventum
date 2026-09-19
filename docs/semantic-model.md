@@ -4,6 +4,11 @@ Eventum asks whether two authored prediction-market rules resolve identically
 under materially relevant interpretations. Titles and embeddings are not the
 decision authority.
 
+The current deployed protocol is `eventum/1.1.1` on Studionet chain `61999` at
+`0x96F23489C251135965b13303A991b2B9579bdF19`. Source registration is bound to
+the published Polymarket evidence. The contract, not the browser, determines
+the canonical event identity and authoritative `source_evidence_hash`.
+
 ## Relations
 
 | Relation | Meaning | Direction |
