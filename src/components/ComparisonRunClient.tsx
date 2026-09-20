@@ -8,6 +8,7 @@ import { studionet, testnetBradbury } from "genlayer-js/chains";
 import { TransactionHashVariant } from "genlayer-js/types";
 import type { Hash } from "genlayer-js/types";
 import { loadPublicConfig, type PublicConfig } from "@/lib/public-config";
+import { isMissingSnapshotError, registrationAction, REGISTRATION_COOLDOWN_MS } from "@/lib/registration-guard";
 import { parseContractJson } from "@/lib/transaction-readback";
 import { formatDate, shortHash } from "@/lib/format";
 import type { ComparisonRun, MarketSnapshot, Relation } from "@/lib/types";
@@ -61,6 +62,8 @@ export function ComparisonRunClient({ initialRun }: { initialRun: ComparisonRun 
   const [refreshing, setRefreshing] = useState(false);
   const [copied, setCopied] = useState("");
   const reconcileLock = useRef(false);
+  const startLock = useRef(false);
+  const registrationCooldown = useRef(new Map<string, number>());
   const runRef = useRef(run);
 
   useEffect(() => {
@@ -179,18 +182,28 @@ export function ComparisonRunClient({ initialRun }: { initialRun: ComparisonRun 
 
   async function registerSnapshot(client: ReturnType<typeof createClient>, snapshot: MarketSnapshot, args: string[], index: 0 | 1, currentRun: ComparisonRun) {
     let existing: Record<string, unknown> | null = null;
+    let lookup: "missing" | "unavailable" | { sourceHash: string } = "missing";
     try {
       existing = contractJson(await client.readContract({ address: run.contractAddress as `0x${string}`, functionName: "get_latest_market_snapshot", args: [snapshot.platform, snapshot.platformMarketId], transactionHashVariant: TransactionHashVariant.LATEST_FINAL, jsonSafeReturn: true }));
-    } catch {
-      // A fresh deployment has no latest snapshot yet; the registration is still the only write path.
+      lookup = { sourceHash: String(existing.source_hash || "") };
+    } catch (error) {
+      lookup = isMissingSnapshotError(error) ? "missing" : "unavailable";
     }
-    if (existing?.platform_market_id === snapshot.platformMarketId && String(existing.source_hash || "").toLowerCase() === args[13].toLowerCase() && typeof existing.source_evidence_hash === "string") {
+    const action = registrationAction(lookup, args[13]);
+    if (action === "wait") throw new Error("The existing snapshot could not be verified; no registration write was submitted.");
+    if (action === "skip") {
       return reconcileNow();
     }
     const txField = index === 0 ? "snapshotATx" : "snapshotBTx";
     const prior = index === 0 ? currentRun.snapshotATx : currentRun.snapshotBTx;
     let hash = prior as Hash | undefined;
     if (!hash) {
+      const cooldownKey = `${snapshot.snapshotId}:${args[13].toLowerCase()}`;
+      const lastAttempt = registrationCooldown.current.get(cooldownKey);
+      if (lastAttempt !== undefined && Date.now() - lastAttempt < REGISTRATION_COOLDOWN_MS) {
+        throw new Error("This snapshot registration is cooling down while the existing attempt is verified.");
+      }
+      registrationCooldown.current.set(cooldownKey, Date.now());
       hash = await client.writeContract({ address: run.contractAddress as `0x${string}`, functionName: "register_market_snapshot", args: args as never[], value: 0n }) as Hash;
       return updateRun({ [txField]: hash });
     }
@@ -198,7 +211,8 @@ export function ComparisonRunClient({ initialRun }: { initialRun: ComparisonRun 
   }
 
   async function startRun() {
-    if (busy || !canStart || !run.snapshots || !run.registerArgs) return;
+    if (startLock.current || busy || !canStart || !run.snapshots || !run.registerArgs) return;
+    startLock.current = true;
     setBusy(true);
     setMessage("");
     try {
@@ -229,6 +243,7 @@ export function ComparisonRunClient({ initialRun }: { initialRun: ComparisonRun 
       setMessage(error instanceof Error ? error.message : "The run could not continue. Its existing hashes were preserved.");
     } finally {
       setBusy(false);
+      startLock.current = false;
     }
   }
 

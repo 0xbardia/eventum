@@ -58,6 +58,16 @@ an HttpOnly application session, verifies transaction claims against the
 current contract, and polls the same hash with bounded backoff. A rejected run
 remains auditable but cannot become a fabricated onchain comparison.
 
+Protocol registration is permissionless, source-bound, and idempotent for the
+same snapshot. The application adds same-origin checks, bounded bodies,
+allowlisted providers, per-IP/session throttling, and read-before-write
+deduplication so repeated preparation does not create avoidable wallet writes.
+
+Accepted comparisons are immutable direct graph edges in v1.1.1. There is no
+in-place dispute or correction write; a disputed edge can be flagged offchain,
+while protocol-level remediation requires a reviewed future version and
+migration. Historical onchain state remains auditable.
+
 ## Protocol model
 
 The contract distinguishes `EQUIVALENT`, `CONDITIONAL_EQUIVALENT`, `SUBSET`,

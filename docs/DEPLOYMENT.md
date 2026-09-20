@@ -12,8 +12,15 @@ chain: 61999
 protocol: eventum/1.1.1
 rpc: https://studio.genlayer.com/api
 source sha256: 4c198184c7a48485cba207c5f6037cd701e27c69c4ab76192a5bfd76803434d5
+deployment tx: 0x77b3c1a0361a3bb1c3ade7618210b4c202356ba645be7ce88b744fdf1579a3e7
 status: FINAL / CERTIFIED
 ```
+
+The current certified evidence includes two finalized
+`register_market_snapshot` operations and one finalized `compare_markets`
+operation. The deployment record preserves the operation counts and labels
+transaction-record provenance; no transaction hash is inferred when it is
+absent from repository artifacts.
 
 The earlier `0x04435B28bA9c57A7abFA1eb6b804218fca67249c` deployment is retained
 only as historical lineage in `deployments/studionet.json`.
@@ -70,6 +77,12 @@ the already-built browser bundle contains no contract address. Do not put
 `DEPLOYER_PRIVATE_KEY`, API keys, passwords, or other secrets in public
 variables. The current `.env.example` contains no secret values.
 
+Registration is permissionless at the contract boundary. Application
+preparation and run mutation are rate-limited by IP/session, same-origin
+checked when an `Origin` header is supplied, body-bounded, provider-allowlisted,
+and protected by an exact-run cooldown. The browser reads before writing and
+does not resubmit a hash when verification is unavailable.
+
 After a future contract deployment, update the canonical runtime variables to
 the new verified address, restart only `eventum`, and rerun the deployment
 provenance plus read/write verification gates. A rebuild is needed for code
@@ -95,3 +108,7 @@ Keep the previous Eventum build and vhost backup. To roll back, stop only the
 vhost, and start the same process. A contract deployment is immutable; a
 rollback changes the configured read/write address only after a separately
 verified deployment record exists.
+
+Accepted v1.1.1 comparison edges are also immutable. There is no in-place
+dispute or remediation write; operational flags remain offchain, and correction
+requires a separately reviewed protocol version or migration.

@@ -12,7 +12,6 @@ networks:
 
 paths:
   contracts: "contracts"
-  artifacts: "artifacts"
+  artifacts: "artifacts/contract-test"
 
 environment: .env
-

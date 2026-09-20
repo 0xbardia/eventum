@@ -11,10 +11,9 @@ The certified protocol is `eventum/1.1.1`; snapshot registration is
 source-bound and stores contract-derived `source_evidence_hash`.
 
 Deployment transaction:
-`0x06e4b609359b0d2c06c76523de261f5519ac41496966d25970f7024af44b8a1a`  
-Execution hash:
-`0xb517ce1138ca86fd753e4570ca277c5a1b8219e03807e257d6df9c101b3ee9ba`  
-Deployment lifecycle: `FINALIZED / MAJORITY_AGREE`.
+`0x77b3c1a0361a3bb1c3ade7618210b4c202356ba645be7ce88b744fdf1579a3e7`
+Deployment lifecycle: `FINALIZED / MAJORITY_AGREE`; the repository does not
+contain a separate execution hash for this deployment.
 
 The older `0x04435B28bA9c57A7abFA1eb6b804218fca67249c` deployment and earlier
 addresses remain historical lineage only; they are not current runtime or
@@ -45,11 +44,19 @@ execution error rather than creating placeholder records.
 
 ## Current live evidence
 
-The exact snapshot and comparison transaction hashes, IDs, semantic fields,
-reverse relationship, and production route checks are maintained in the
-release evidence under `artifacts/` and are also verifiable through `/status`,
+The current deployment evidence records two finalized snapshots, one accepted
+comparison, and one direct graph edge. Exact transaction hashes are included
+only when present in certified repository evidence; the deployment JSON does
+not invent missing hashes. The state is also verifiable through `/status`,
 `/markets`, `/comparisons`, and `/graph` in the live application.
 
 The current deployment is immutable. Contract changes require a new source
 hash, a new deployment, source provenance, runtime migration, and a fresh
 read/write certification.
+
+## Current finalized write evidence
+
+The submitted deployment has two finalized `register_market_snapshot`
+operations and one finalized `compare_markets` operation. The exact current
+write transaction records are not present in repository artifacts; the
+deployment JSON records operation counts and does not invent hashes.

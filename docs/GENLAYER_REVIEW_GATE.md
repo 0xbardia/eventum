@@ -13,7 +13,7 @@ release status is maintained in `artifacts/final/final-release-gates.md`.
 | Is consensus meaningful? | Leader and validator independently run the same structured semantic task; relation, safety, identity hint, and outcome mapping must match. | PASS |
 | Does the contract contain real logic? | Yes: bounded schema validation, version/index mutation, prompt construction, model-output validation, canonical identity derivation, mapping inversion, and graph projection. | PASS |
 | Are states and reads useful? | 11 public reads expose immutable snapshots, counts, history, direct edges, latest pair results, and protocol version. All 11 were exercised against the new finalized Studionet deployment. | PASS |
-| Are results persisted? | The contract persists finalized snapshot and comparison writes; the current fresh deployment has no records because live write authority was unavailable. | PASS — capability, current state empty |
+| Are results persisted? | The contract persists finalized snapshot and comparison writes; the submitted deployment evidence records two finalized snapshots, one accepted comparison, and one direct graph edge. | PASS — current state populated |
 | Does the frontend use the deployment? | `.env` is canonical; the browser receives the current address from `/api/runtime-config`, and status, markets, graph, result, and wallet paths use the same runtime target. | PASS |
 | Is this more than similarity? | The contract checks event, actor, action, time, threshold, authority, exceptions, outcome spaces, mapping, material differences, and every-world-state settlement compatibility. There is no confidence score. | PASS |
 | Are integrations real? | Polymarket Gamma was probed and the production preview flow was exercised with real public API responses. Unsupported providers are rejected. | PASS |
@@ -21,7 +21,7 @@ release status is maintained in `artifacts/final/final-release-gates.md`.
 | Is hostile evidence tested? | The 35-case Direct Mode suite covers prompt injection, malformed JSON, unknown enums, hallucinated outcomes, oversized values, Unicode, pagination boundaries, and disagreement/failure paths. | PASS |
 | Does the UI show why GenLayer matters? | It exposes relationship taxonomy, reason codes, material differences, evidence hashes, finalization states, contract address, and direct-edge semantics. | PASS |
 | Are claims evidence-backed? | Adoption, liquidity, platform coverage, fake transactions, and third-party audit claims are absent. Controlled Studio fixture data is labeled as verification data. | PASS |
-| Could a reviewer reproduce Studio? | The exact source hash, address, network, deployment tx, write txs, read args/results, and verifier command are recorded. | PASS |
+| Could a reviewer reproduce Studio? | The exact source hash, address, network, deployment tx, write-operation evidence, read matrix, and verifier command are recorded; missing transaction hashes are not fabricated. | PASS |
 
 ## Remaining reviewer risks
 

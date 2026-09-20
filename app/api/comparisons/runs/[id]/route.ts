@@ -1,4 +1,4 @@
-import { errorResponse, parseBody, rateLimitResponse, readJson, response, withApiHeaders } from "@/lib/api";
+import { assertSameOrigin, errorResponse, parseBody, rateLimitResponse, readJson, response, withApiHeaders } from "@/lib/api";
 import { getComparisonRun, getComparisonRunRecord, updateComparisonRun } from "@/lib/db";
 import { ReconciliationError, reconcileComparisonRun, validateTransactionClaim } from "@/lib/run-reconciliation";
 import { updateComparisonRunSchema } from "@/lib/schemas";
@@ -28,8 +28,9 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const limited = rateLimitResponse(request);
+    const limited = rateLimitResponse(request, "registration");
     if (limited) return limited;
+    assertSameOrigin(request);
     const { id } = await context.params;
     const session = getSession(request);
     if (!session) return withApiHeaders(response({ error: { code: "COMPARISON_RUN_AUTH_REQUIRED", message: "This comparison run requires its owning application session." } }, 401));

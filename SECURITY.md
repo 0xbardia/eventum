@@ -33,3 +33,22 @@ resubmits a wallet transaction.
 Security fixes must preserve protocol truth and should include a focused
 regression test where practical. See `docs/THREAT_MODEL.md` and
 `docs/CONTRACT_SECURITY.md` for the current model and controls.
+
+## Registration abuse controls
+
+Registration is permissionless at the protocol boundary, but application
+preparation and run-mutation routes are same-origin checked when a browser
+sends an `Origin`, bounded by the streaming request limit, restricted to the
+verified Polymarket provider, and throttled by IP plus application session.
+The server reuses an identical prepared run during a short session cooldown.
+The wallet flow reads the latest snapshot before writing, skips an exact source
+match, waits on an unavailable verification read, and never retries a submitted
+hash as a new transaction.
+
+## Immutable-edge limitation
+
+Eventum v1.1.1 has no staking, reputation, challenge, dispute, or in-place
+correction mutation. An accepted comparison is an immutable direct graph edge.
+An operator may flag a disputed edge in offchain records or documentation, but
+must not silently overwrite onchain truth. Correction requires a separately
+reviewed protocol version, migration, or governance mechanism.

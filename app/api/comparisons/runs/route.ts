@@ -1,6 +1,6 @@
-import { errorResponse, parseBody, rateLimitResponse, readJson, response, withApiHeaders } from "@/lib/api";
+import { assertSameOrigin, errorResponse, parseBody, rateLimitResponse, readJson, response, withApiHeaders } from "@/lib/api";
 import { getPublicConfig } from "@/lib/config";
-import { createComparisonRun, listComparisonRuns } from "@/lib/db";
+import { createComparisonRun, findRecentComparisonRun, listComparisonRuns } from "@/lib/db";
 import { createComparisonRunSchema } from "@/lib/schemas";
 import { getSession } from "@/lib/session";
 
@@ -14,20 +14,23 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const limited = rateLimitResponse(request);
+    const limited = rateLimitResponse(request, "registration");
     if (limited) return limited;
+    assertSameOrigin(request);
     const session = getSession(request, true)!;
     const body = parseBody(createComparisonRunSchema, await readJson(request));
     const runtime = getPublicConfig();
-    const run = createComparisonRun({
+    const registerArgs = body.registerArgs as [string[], string[]];
+    const existing = findRecentComparisonRun(body.snapshotAId, body.snapshotBId, body.comparisonVersion, registerArgs, session.hash);
+    const run = existing ?? createComparisonRun({
       ...body,
       snapshots: body.snapshots as [typeof body.snapshots[0], typeof body.snapshots[1]],
-      registerArgs: body.registerArgs as [string[], string[]],
+      registerArgs,
       contractAddress: runtime.contractAddress,
       network: runtime.network,
       chainId: runtime.chainId,
     }, session.hash);
-    const result = withApiHeaders(response({ run, authority: "application-persistence" }, 201));
+    const result = withApiHeaders(response({ run, authority: "application-persistence" }, existing ? 200 : 201));
     if (session.setCookie) result.headers.set("Set-Cookie", session.setCookie);
     return result;
   } catch (error) {

@@ -6,8 +6,8 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { errorResponse, parseBody, rateLimit, rateLimitResponse, readJson } from "../../src/lib/api";
 import { getConfig } from "../../src/lib/config";
-import { dbHealth, predictedSnapshotId, snapshotIdentityPayload } from "../../src/lib/db";
-import { canonicalJson } from "../../src/lib/hash";
+import { dbHealth, predictedSnapshotId, registerArgs, snapshotIdentityPayload } from "../../src/lib/db";
+import { canonicalJson, sha256 } from "../../src/lib/hash";
 import { assertPublicHost, canonicalEventHintFromParent, parsePolymarketUrl, resolvePolymarket } from "../../src/lib/providers/polymarket";
 import { createComparisonRunSchema, prepareComparisonSchema, resolveMarketSchema } from "../../src/lib/schemas";
 
@@ -80,6 +80,61 @@ test("nested event URLs resolve the exact Gamma child market", async () => {
       () => resolvePolymarket(`https://polymarket.com/event/${eventSlug}/${marketA}`),
       /not part of that event/,
     );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Gamma registration times use authoritative startDate/endDate, not ISO display fields", async () => {
+  const payload = {
+    id: "4052421",
+    slug: "will-bitcoin-reach-80k-in-september-2026",
+    question: "Will Bitcoin reach $80,000 in September?",
+    description: "Resolve from the published Binance rules.",
+    outcomes: '["Yes","No"]',
+    resolutionSource: "",
+    startDate: "2026-09-01T05:07:17Z",
+    startDateIso: "2026-09-01",
+    endDate: "2026-10-01T04:00:00Z",
+    endDateIso: "2026-10-01",
+    events: [{ id: "946004", slug: "what-price-will-bitcoin-hit-in-september-2026", title: "What price will Bitcoin hit in September?" }],
+  };
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = (async () => new Response(JSON.stringify(payload), { headers: { "content-type": "application/json" } })) as typeof fetch;
+    const evidence = await resolvePolymarket("https://polymarket.com/market/will-bitcoin-reach-80k-in-september-2026");
+    const args = registerArgs(evidence);
+    assert.notEqual(payload.startDate, payload.startDateIso);
+    assert.notEqual(payload.endDate, payload.endDateIso);
+    assert.equal(evidence.openTime, payload.startDate);
+    assert.equal(evidence.closeTime, payload.endDate);
+    assert.deepEqual({ open_time: args[8], close_time: args[9] }, { open_time: payload.startDate, close_time: payload.endDate });
+    assert.equal(evidence.canonicalEventHint, "polymarket:event:946004");
+    assert.equal(evidence.sourceHash, sha256(canonicalJson(payload)));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("missing authoritative Gamma times stay empty instead of using ISO fallbacks", async () => {
+  const payload = {
+    id: "4052422",
+    slug: "missing-authoritative-times",
+    question: "A market with incomplete dates",
+    description: "Resolve from the published rules.",
+    outcomes: '["Yes","No"]',
+    startDateIso: "2026-09-01",
+    endDateIso: "2026-10-01",
+  };
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = (async () => new Response(JSON.stringify(payload), { headers: { "content-type": "application/json" } })) as typeof fetch;
+    const evidence = await resolvePolymarket("https://polymarket.com/market/missing-authoritative-times");
+    const args = registerArgs(evidence);
+    assert.equal(evidence.openTime, "");
+    assert.equal(evidence.closeTime, "");
+    assert.equal(args[8], "");
+    assert.equal(args[9], "");
   } finally {
     globalThis.fetch = originalFetch;
   }

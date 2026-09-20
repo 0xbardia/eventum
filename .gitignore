@@ -41,5 +41,9 @@ tsconfig.tsbuildinfo
 playwright-report/
 test-results/
 artifacts/
+!artifacts/
+artifacts/*
+!artifacts/acceptance-fix/
+!artifacts/acceptance-fix/provider-contract-field-matrix.md
 *.pem
 *.key

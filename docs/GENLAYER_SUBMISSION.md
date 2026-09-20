@@ -53,9 +53,9 @@ Outcome Resolution
 - deployment status: final and certified
 - source-bound registration: contract-derived `canonical_event_hint` and `source_evidence_hash`
 - meaningful writes: `register_market_snapshot`, `compare_markets`
-- write verification: the live snapshot and comparison evidence is maintained
-  in the current release artifacts and is verifiable through the public app
-  routes and current contract reads
+- write verification: two finalized snapshot registrations and one finalized
+  comparison are present in the submitted deployment evidence; exact current
+  write hashes are recorded only when available and are not fabricated
 
 ## LIVE APP
 

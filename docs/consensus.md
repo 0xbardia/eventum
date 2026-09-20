@@ -50,3 +50,19 @@ Once a transaction hash exists, the run persists it and reconciles that same
 hash. Refresh, navigation, RPC interruption, and PM2 restart must lead to
 verification or a truthful failure state; they must never suggest a blind
 duplicate submission.
+
+## Dispute and remediation boundary
+
+An accepted comparison is an immutable direct graph edge in protocol `1.1.1`.
+The contract exposes no dispute, challenge, or correction mutation, and the
+application must not silently overwrite an accepted edge. A disputed result
+may be flagged in offchain operational documentation while the historical edge
+remains auditable. Protocol-level correction requires a separately reviewed
+future protocol version, migration, or explicitly reviewed governance design.
+
+The historical transaction
+`0xc4e66d1c057e01fcbdbc0446ed7cc555e0d32016b7d034fbef2513aecd141679`
+finalized consensus and was correctly rejected by the contract because the
+submitted source evidence did not match Gamma. The defect was adapter field
+selection (`startDateIso`/`endDateIso` instead of `startDate`/`endDate`), not
+contract comparison semantics; the transaction is historical evidence only.

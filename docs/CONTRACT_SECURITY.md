@@ -50,9 +50,10 @@ Earlier deployment values in the historical paragraphs below are retained for
 audit lineage and are not active runtime targets.
 
 The reviewed source passed `genvm-linter` validation and 35 Direct Mode tests.
-The exact tested source hash `7d45c0497d3b1466aace1b9b3f8c216ae423331f110f8d618f44a7edbb5b795a`
-was deployed to Studionet at `0x04435B28bA9c57A7abFA1eb6b804218fca67249c`. Its
-11 public reads were exercised against the fresh deployment. Meaningful live
-writes remain `BLOCKED_EXTERNAL` because the available signing authority has
-zero balance; Direct Mode covers the write semantics and no write success is
-claimed here. No third-party audit claim is made.
+The historical source hash `7d45c0497d3b1466aace1b9b3f8c216ae423331f110f8d618f44a7edbb5b795a`
+was deployed to Studionet at the superseded
+`0x04435B28bA9c57A7abFA1eb6b804218fca67249c`; its read-only and blocked-write
+notes are historical. The current operator deployment is
+`0x96F23489C251135965b13303A991b2B9579bdF19` with finalized snapshot and
+comparison write evidence recorded in `deployments/studionet.json`. No
+third-party audit claim is made.

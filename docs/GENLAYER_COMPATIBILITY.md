@@ -50,20 +50,21 @@ The wallet flow waits for `TransactionStatus.FINALIZED` and requires
 account-free client and the latest finalized variant.
 
 The prior Studio write flow for the superseded populated fixture accepted zero
-native value and returned finalized majority-agree receipts. The current
-operator deployment is fresh; its write path still requires a funded wallet and
-was not submitted during the final pass. No undocumented fee API was invented;
-fee/transaction behavior should be re-profiled when the network or SDK changes.
+native value and returned finalized majority-agree receipts. The submitted
+operator deployment now has certified finalized snapshot and comparison writes;
+the current browser flow still requires a funded wallet for new writes. No
+undocumented fee API was invented; fee/transaction behavior should be
+re-profiled when the network or SDK changes.
 
 ## Current verified deployment
 
 - address: `0x96F23489C251135965b13303A991b2B9579bdF19`
 - protocol: `eventum/1.1.1`
 - source SHA-256: `4c198184c7a48485cba207c5f6037cd701e27c69c4ab76192a5bfd76803434d5`
-- deployment transaction: `0x06e4b609359b0d2c06c76523de261f5519ac41496966d25970f7024af44b8a1a`
+- deployment transaction: `0x77b3c1a0361a3bb1c3ade7618210b4c202356ba645be7ce88b744fdf1579a3e7`
 - deployment status/result: `FINALIZED / MAJORITY_AGREE`
-- deployment execution hash: `0xb517ce1138ca86fd753e4570ca277c5a1b8219e03807e257d6df9c101b3ee9ba`
-- verification date: `2026-09-11 UTC`
+- deployment execution hash: not recorded in the repository evidence
+- verification date: `2026-09-20 UTC`
 
 The source hash, transaction evidence, and all read/write results are
 maintained in `deployments/studionet.json` and `docs/STUDIO_VERIFICATION.md`.

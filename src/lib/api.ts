@@ -11,20 +11,34 @@ function rateMap() {
   return globalRate.eventumRate;
 }
 
-export function rateLimit(request: Request): boolean {
-  const config = getConfig();
+function rateKeys(request: Request, scope: string): string[] {
   const real = request.headers.get("x-real-ip")?.trim();
   const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const key = real || forwarded || "unknown";
+  const address = real || forwarded || "unknown";
+  const keys = [`${scope}:ip:${address}`];
+  const session = request.headers.get("cookie")?.match(/(?:^|;\s*)eventum_session=([A-Za-z0-9_-]{43})(?:;|$)/)?.[1];
+  if (session) keys.push(`${scope}:session:${session}`);
+  return keys;
+}
+
+export function rateLimit(request: Request, scope = "read"): boolean {
+  const config = getConfig();
   const now = Date.now();
-  const current = rateMap().get(key);
-  if (!current || current.resetAt <= now) {
-    rateMap().set(key, { count: 1, resetAt: now + config.RATE_LIMIT_WINDOW_MS });
-    return true;
+  const keys = rateKeys(request, scope);
+  const buckets = keys.map((key) => rateMap().get(key));
+  if (buckets.some((current) => current && current.resetAt > now && current.count >= config.RATE_LIMIT_MAX)) return false;
+  for (const key of keys) {
+    const current = rateMap().get(key);
+    if (!current || current.resetAt <= now) rateMap().set(key, { count: 1, resetAt: now + config.RATE_LIMIT_WINDOW_MS });
+    else current.count += 1;
   }
-  if (current.count >= config.RATE_LIMIT_MAX) return false;
-  current.count += 1;
   return true;
+}
+
+export function assertSameOrigin(request: Request) {
+  const origin = request.headers.get("origin")?.trim();
+  if (!origin) return;
+  if (origin !== new URL(request.url).origin) throw new ApiError("CROSS_ORIGIN_REQUEST", "The request origin is not allowed.", 403);
 }
 
 export async function readJson(request: Request): Promise<unknown> {
@@ -88,8 +102,8 @@ export function response(data: unknown, status = 200, headers: HeadersInit = {})
   });
 }
 
-export function rateLimitResponse(request: Request): Response | null {
-  if (rateLimit(request)) return null;
+export function rateLimitResponse(request: Request, scope = "read"): Response | null {
+  if (rateLimit(request, scope)) return null;
   return withApiHeaders(response({ error: { code: "RATE_LIMITED", message: "Too many requests; try again shortly." } }, 429));
 }
 

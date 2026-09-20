@@ -22,7 +22,9 @@ Polymarket
 
 The server resolves allowlisted Polymarket URLs through the Gamma API,
 canonicalizes the child market, bounds the payload, and creates normalized
-evidence. Raw provider payloads are not protocol state.
+evidence. Registration uses Gamma `startDate`/`endDate` verbatim for the
+contract's corroborated time fields. Raw provider payloads are not protocol
+state.
 
 ### Application
 
@@ -38,6 +40,12 @@ that same session; historical runs without a binding remain public and
 read-only. Public PATCH accepts transaction-hash claims only. The server checks
 the chain, current contract, transaction stage, and contract read-back before
 populating consensus, persistence, relation, safety, or comparison fields.
+
+Protocol registration remains permissionless, while application routes use
+same-origin checks, bounded bodies, allowlisted providers, scoped IP/session
+limits, and a short exact-run cooldown. Before a wallet write, the browser
+reads the latest snapshot; an exact source match is reused, and an unavailable
+read stops the write.
 
 ### Browser wallet
 
@@ -60,6 +68,9 @@ offchain previews with contract read-back after registration.
 
 The graph is a direct projection of persisted contract comparisons. A rejected
 run has no graph edge, and Eventum does not infer transitive relationships.
+Persisted edges are immutable in v1.1.1. Dispute flags can exist only in
+offchain operational records; correction needs a reviewed future protocol
+version or migration.
 
 ## Runtime binding
 

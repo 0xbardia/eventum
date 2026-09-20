@@ -52,10 +52,11 @@ All 11 reads were exercised against the finalized Studionet deployment. See
 `docs/STUDIO_VERIFICATION.md` and `scripts/verify-studionet.ts`.
 
 The current operator deployment is populated with two finalized market
-snapshots, one accepted comparison, and one direct graph edge. Exact current
-deployment and transaction evidence is maintained in
-`deployments/studionet.json` and the release artifacts. Direct Mode continues
-to cover write validation and semantic behavior.
+snapshots, one accepted comparison, and one direct graph edge. Current
+deployment and write-operation evidence is maintained in
+`deployments/studionet.json` and `docs/STUDIO_VERIFICATION.md`; missing
+transaction hashes are not inferred. Direct Mode continues to cover write
+validation and semantic behavior.
 
 ## Prompt and validation
 

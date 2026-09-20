@@ -1,22 +1,67 @@
 {
   "project": "Eventum",
   "source": "contracts/eventum.py",
+  "contractSourceSha256": "4c198184c7a48485cba207c5f6037cd701e27c69c4ab76192a5bfd76803434d5",
   "sourceSha256": "4c198184c7a48485cba207c5f6037cd701e27c69c4ab76192a5bfd76803434d5",
   "network": "studionet",
   "chainId": 61999,
   "protocol": "eventum/1.1.1",
+  "protocolVersion": "eventum/1.1.1",
   "rpc": "https://studio.genlayer.com/api",
   "explorer": "https://explorer-studio.genlayer.com/",
   "contractAddress": "0x96F23489C251135965b13303A991b2B9579bdF19",
-  "deploymentStatus": "FINAL_CERTIFIED",
-  "deploymentResult": "EXTERNAL_CERTIFICATION",
-  "verifiedAt": "2026-09-19T00:00:00Z",
+  "deploymentTx": "0x77b3c1a0361a3bb1c3ade7618210b4c202356ba645be7ce88b744fdf1579a3e7",
+  "deploymentStatus": "FINALIZED_CERTIFIED",
+  "deploymentConsensus": "MAJORITY_AGREE",
+  "deploymentExecution": {
+    "status": "FINISHED_WITH_RETURN",
+    "provenance": "Certified deployment evidence; no separate execution hash is recorded in the repository."
+  },
+  "verifiedAt": "2026-09-20T20:23:38Z",
   "sourceProvenance": "EXACT_SHA256_MATCH",
-  "verifiedReadMethods": 6,
-  "verifiedWriteMethods": 0,
+  "publicReadMethods": [
+    "get_protocol_version",
+    "get_market_count",
+    "get_comparison_count",
+    "get_market_snapshot",
+    "get_latest_market_snapshot",
+    "get_market_ids",
+    "get_comparison",
+    "get_latest_comparison",
+    "get_relationship",
+    "get_comparison_ids",
+    "get_graph_edges"
+  ],
+  "publicWriteMethods": [
+    "register_market_snapshot",
+    "compare_markets"
+  ],
+  "readVerification": {
+    "status": "CERTIFIED",
+    "count": 11,
+    "finalizedState": {
+      "marketSnapshots": 2,
+      "comparisons": 1,
+      "directGraphEdges": 1
+    },
+    "provenance": "Current submitted deployment read evidence recorded in docs/STUDIO_VERIFICATION.md."
+  },
   "writeVerification": {
-    "status": "PENDING_EXTERNAL_WALLET",
-    "reason": "The deployment is verified and fresh; controlled writes require an authorized funded browser wallet."
+    "status": "FINALIZED_WRITES_PRESENT",
+    "count": 3,
+    "operations": [
+      {
+        "method": "register_market_snapshot",
+        "status": "FINALIZED",
+        "count": 2
+      },
+      {
+        "method": "compare_markets",
+        "status": "FINALIZED",
+        "count": 1
+      }
+    ],
+    "provenance": "Current submitted deployment acceptance evidence; exact current write transaction records are not present in repository artifacts, so no hashes are fabricated."
   },
   "historicalSuperseded": [
     {

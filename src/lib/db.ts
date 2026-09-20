@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { getConfig } from "./config";
 import { canonicalJson, sha256 } from "./hash";
+import { REGISTRATION_COOLDOWN_MS } from "./registration-guard";
 import type { Comparison, ComparisonRun, ComparisonRunEvent, MarketEvidence, MarketSnapshot } from "./types";
 
 type PersistedCache = {
@@ -154,6 +155,25 @@ export function registerArgs(evidence: MarketEvidence): string[] {
     canonicalJson(evidence.normalizedFacts),
     evidence.canonicalEventHint,
   ];
+}
+
+export function findRecentComparisonRun(
+  snapshotAId: string,
+  snapshotBId: string,
+  comparisonVersion: string,
+  registerArgsValue: [string[], string[]],
+  ownerSessionHash: string,
+): ComparisonRun | null {
+  const cutoff = Date.now() - REGISTRATION_COOLDOWN_MS;
+  const existing = Object.values(getDb().comparisonRuns ?? {}).find((run) => (
+    run.ownerSessionHash === ownerSessionHash &&
+    Date.parse(run.createdAt) >= cutoff &&
+    run.snapshotAId === snapshotAId &&
+    run.snapshotBId === snapshotBId &&
+    run.comparisonVersion === comparisonVersion &&
+    canonicalJson(run.registerArgs ?? null) === canonicalJson(registerArgsValue)
+  ));
+  return existing ? publicRun(existing) : null;
 }
 
 export function storeMarketPreview(evidence: MarketEvidence): MarketSnapshot {

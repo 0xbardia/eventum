@@ -28,6 +28,12 @@ the canonical event identity and authoritative `source_evidence_hash`.
 Reverse lookup inverts `SUBSET`/`SUPERSET` and inverts direction-aware outcome
 mapping. A direct graph edge exists only for a persisted onchain comparison.
 
+Persisted direct edges are immutable in `eventum/1.1.1`; the protocol has no
+in-place dispute or correction write. A disputed edge can be marked in
+application documentation without changing protocol truth. A correction must
+come through a separately reviewed protocol version, migration, or governance
+mechanism, and the original edge remains auditable.
+
 ## Safety
 
 `safe_to_compare` means the evidence supports a useful semantic comparison. It

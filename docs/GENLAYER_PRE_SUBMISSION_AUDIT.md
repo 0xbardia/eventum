@@ -105,19 +105,21 @@ The durable Studio read/write matrix is
 
 ## F. Read/write verification
 
-All 11 public reads were run against the current finalized deployment with
-GenLayerJS `1.1.8` and `TransactionHashVariant.LATEST_FINAL`; all passed. The
-fresh deployment returned zero counts and expected not-found errors for absent
-IDs:
+This pre-submission audit records the superseded `0x04435B28bA9c57A7abFA1eb6b804218fca67249c`
+deployment. All 11 public reads were run against that finalized deployment
+with GenLayerJS `1.1.8` and `TransactionHashVariant.LATEST_FINAL`; all passed.
+That historical fresh deployment returned zero counts and expected not-found
+errors for absent IDs:
 
 `get_protocol_version`, `get_market_count`, `get_comparison_count`,
 `get_market_snapshot`, `get_latest_market_snapshot`, `get_market_ids`,
 `get_comparison`, `get_latest_comparison`, `get_relationship`,
 `get_comparison_ids`, and `get_graph_edges`.
 
-Meaningful live writes were not submitted in the current pass because the
-available signing authority has zero balance. They are explicitly
-`BLOCKED_EXTERNAL`; Direct Mode covers the contract write and semantic paths.
+Meaningful live writes were not submitted to that superseded deployment in the
+historical pass because the available signing authority had zero balance.
+Current submitted-deployment write evidence is maintained in
+`docs/STUDIO_VERIFICATION.md` and `deployments/studionet.json`.
 
 The prior fixture writes below are historical evidence only, not current state:
 
@@ -323,7 +325,7 @@ DNS record, certificate, or firewall configuration was changed.
 | Skeptical GenLayer review gate | PASS |
 | Optional Bradbury validation | PLANNED / not a required Studionet gate |
 
-The current final gate is `BLOCKED_EXTERNAL` solely because the fresh
-deployment's meaningful writes could not be exercised without funded wallet
-authority. Do not treat this historical audit's `SUBMISSION_READY` label as the
+This historical final gate was `BLOCKED_EXTERNAL` solely because the
+superseded deployment's meaningful writes could not be exercised without funded
+wallet authority. Do not treat this historical audit's `SUBMISSION_READY` label as the
 current release status.

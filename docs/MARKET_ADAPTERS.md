@@ -24,6 +24,11 @@ timestamps, provider dates, resolution source, condition ID, event/market
 slugs, and outcome count. Empty provider fields remain empty; Eventum does not
 invent deadlines, clarifications, or canonical identities.
 
+For registration, `open_time` is Gamma `startDate` and `close_time` is Gamma
+`endDate`, exactly as the frozen contract corroborates. `startDateIso` and
+`endDateIso` are display fields only and are never substituted; if an
+authoritative field is absent, the adapter sends an empty optional value.
+
 The real Gamma endpoint was probed during release research and the production
 resolve path was exercised with a real public market response. The controlled
 onchain fixture in the Studio verification is deliberately separate from that
