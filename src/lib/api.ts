@@ -35,10 +35,22 @@ export function rateLimit(request: Request, scope = "read"): boolean {
   return true;
 }
 
+function canonicalOrigin(value: string): string | null {
+  try {
+    const url = new URL(value);
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
 export function assertSameOrigin(request: Request) {
   const origin = request.headers.get("origin")?.trim();
-  if (!origin) return;
-  if (origin !== new URL(request.url).origin) throw new ApiError("CROSS_ORIGIN_REQUEST", "The request origin is not allowed.", 403);
+  const expected = canonicalOrigin(getConfig().APP_URL);
+  if (!origin || !expected || canonicalOrigin(origin) !== expected) {
+    throw new ApiError("CROSS_ORIGIN_REQUEST", "The request origin is not allowed.", 403);
+  }
 }
 
 export async function readJson(request: Request): Promise<unknown> {

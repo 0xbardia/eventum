@@ -78,10 +78,11 @@ the already-built browser bundle contains no contract address. Do not put
 variables. The current `.env.example` contains no secret values.
 
 Registration is permissionless at the contract boundary. Application
-preparation and run mutation are rate-limited by IP/session, same-origin
-checked when an `Origin` header is supplied, body-bounded, provider-allowlisted,
-and protected by an exact-run cooldown. The browser reads before writing and
-does not resubmit a hash when verification is unavailable.
+preparation and run mutation require an `Origin` exactly matching the
+configured canonical `APP_URL` origin, are rate-limited by IP/session,
+body-bounded, provider-allowlisted, and protected by an exact-run cooldown.
+The browser reads before writing and does not resubmit a hash when verification
+is unavailable.
 
 After a future contract deployment, update the canonical runtime variables to
 the new verified address, restart only `eventum`, and rerun the deployment

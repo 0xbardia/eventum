@@ -54,6 +54,7 @@ test("production resolves both nested URLs to their exact child markets", async 
   await expect(page.locator(".error-text")).toHaveCount(0);
 
   const canonicalResponse = await page.request.post("/api/comparisons/prepare", {
+    headers: { origin: new URL(process.env.BASE_URL || "http://127.0.0.1:4187").origin },
     data: {
       urls: [urlA + "?utm_source=test#details", urlB + "/"],
       comparisonVersion: "1.0.0",

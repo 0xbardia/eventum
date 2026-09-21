@@ -24,6 +24,7 @@ window and limit.
 ```bash
 curl -sS https://eventum.bydx.fun/api/status
 curl -sS -X POST https://eventum.bydx.fun/api/markets/resolve \
+  -H 'origin: https://eventum.bydx.fun' \
   -H 'content-type: application/json' \
   -d '{"url":"https://polymarket.com/market/<slug>"}'
 ```

@@ -30,11 +30,26 @@ test("temporary verification failure never becomes a duplicate write", () => {
   assert.equal(registrationAction("unavailable", "a"), "wait");
 });
 
-test("browser mutation routes reject a foreign origin while non-browser clients remain usable", () => {
-  assert.throws(
-    () => assertSameOrigin(new Request("http://localhost/api/comparisons/runs", { headers: { origin: "https://evil.example" } })),
-    /origin is not allowed/,
-  );
-  assert.doesNotThrow(() => assertSameOrigin(new Request("http://localhost/api/comparisons/runs", { headers: { origin: "http://localhost" } })));
-  assert.doesNotThrow(() => assertSameOrigin(new Request("http://localhost/api/comparisons/runs")));
+test("browser mutation routes use APP_URL as the proxy-safe origin authority", () => {
+  const previousAppUrl = process.env.APP_URL;
+  const request = (origin: string, headers: Record<string, string> = {}) => new Request("http://127.0.0.1:4187/api/comparisons/runs", { headers: { origin, ...headers } });
+  try {
+    process.env.APP_URL = "https://eventum.bydx.fun";
+    assert.doesNotThrow(() => assertSameOrigin(request("https://eventum.bydx.fun")));
+    assert.doesNotThrow(() => assertSameOrigin(request("https://eventum.bydx.fun:443")));
+    assert.doesNotThrow(() => assertSameOrigin(request("https://eventum.bydx.fun", { "x-forwarded-host": "eventum.bydx.fun", "x-forwarded-proto": "https" })));
+    for (const origin of [
+      "http://eventum.bydx.fun",
+      "https://eventum.bydx.fun.attacker.com",
+      "https://evil.eventum.bydx.fun",
+      "https://example.com",
+      "https://attacker.com",
+    ]) {
+      assert.throws(() => assertSameOrigin(request(origin, { "x-forwarded-host": "eventum.bydx.fun", "x-forwarded-proto": "https" })), /origin is not allowed/);
+    }
+    assert.throws(() => assertSameOrigin(new Request("http://127.0.0.1:4187/api/comparisons/runs")), /origin is not allowed/);
+  } finally {
+    if (previousAppUrl === undefined) delete process.env.APP_URL;
+    else process.env.APP_URL = previousAppUrl;
+  }
 });

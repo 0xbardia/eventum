@@ -37,9 +37,10 @@ regression test where practical. See `docs/THREAT_MODEL.md` and
 ## Registration abuse controls
 
 Registration is permissionless at the protocol boundary, but application
-preparation and run-mutation routes are same-origin checked when a browser
-sends an `Origin`, bounded by the streaming request limit, restricted to the
-verified Polymarket provider, and throttled by IP plus application session.
+preparation and run-mutation routes require an `Origin` that exactly matches
+the configured canonical `APP_URL` origin, bounded by the streaming request
+limit, restricted to the verified Polymarket provider, and throttled by IP plus
+application session.
 The server reuses an identical prepared run during a short session cooldown.
 The wallet flow reads the latest snapshot before writing, skips an exact source
 match, waits on an unavailable verification read, and never retries a submitted

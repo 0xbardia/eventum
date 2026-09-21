@@ -54,7 +54,7 @@ function cookie(response: Response): string {
 }
 
 async function create(ip: string) {
-  const response = await POST(new Request("http://localhost/api/comparisons/runs", { method: "POST", headers: { "x-real-ip": ip, "content-type": "application/json" }, body: JSON.stringify(body()) }));
+  const response = await POST(new Request("http://localhost/api/comparisons/runs", { method: "POST", headers: { origin: "http://127.0.0.1:4187", "x-real-ip": ip, "content-type": "application/json" }, body: JSON.stringify(body()) }));
   assert.equal(response.status, 201);
   return { run: (await response.clone().json() as { run: { runId: string } }).run, cookie: cookie(response) };
 }
@@ -62,18 +62,18 @@ async function create(ip: string) {
 test("comparison run mutations require the owning session and reject forged chain fields", async () => {
   process.env.DATABASE_PATH = join(mkdtempSync(join(tmpdir(), "eventum-security-")), "cache.json");
   process.env.GENLAYER_CONTRACT_ADDRESS = contract;
-  const unauthenticated = await PATCH(new Request("http://localhost/api/comparisons/runs/random", { method: "PATCH", headers: { "content-type": "application/json", "x-real-ip": "198.51.100.41" }, body: JSON.stringify({ comparisonTx: `0x${"a".repeat(64)}` }) }), { params: Promise.resolve({ id: "random" }) });
+  const unauthenticated = await PATCH(new Request("http://localhost/api/comparisons/runs/random", { method: "PATCH", headers: { origin: "http://127.0.0.1:4187", "content-type": "application/json", "x-real-ip": "198.51.100.41" }, body: JSON.stringify({ comparisonTx: `0x${"a".repeat(64)}` }) }), { params: Promise.resolve({ id: "random" }) });
   assert.equal(unauthenticated.status, 401);
 
   const first = await create("198.51.100.42");
   const second = await create("198.51.100.43");
-  const crossSession = await PATCH(new Request(`http://localhost/api/comparisons/runs/${first.run.runId}`, { method: "PATCH", headers: { cookie: second.cookie, "content-type": "application/json", "x-real-ip": "198.51.100.44" }, body: JSON.stringify({ comparisonTx: `0x${"b".repeat(64)}` }) }), { params: Promise.resolve({ id: first.run.runId }) });
+  const crossSession = await PATCH(new Request(`http://localhost/api/comparisons/runs/${first.run.runId}`, { method: "PATCH", headers: { origin: "http://127.0.0.1:4187", cookie: second.cookie, "content-type": "application/json", "x-real-ip": "198.51.100.44" }, body: JSON.stringify({ comparisonTx: `0x${"b".repeat(64)}` }) }), { params: Promise.resolve({ id: first.run.runId }) });
   assert.equal(crossSession.status, 403);
 
-  const random = await PATCH(new Request("http://localhost/api/comparisons/runs/missing", { method: "PATCH", headers: { cookie: first.cookie, "content-type": "application/json", "x-real-ip": "198.51.100.45" }, body: JSON.stringify({ comparisonTx: `0x${"c".repeat(64)}` }) }), { params: Promise.resolve({ id: "missing" }) });
+  const random = await PATCH(new Request("http://localhost/api/comparisons/runs/missing", { method: "PATCH", headers: { origin: "http://127.0.0.1:4187", cookie: first.cookie, "content-type": "application/json", "x-real-ip": "198.51.100.45" }, body: JSON.stringify({ comparisonTx: `0x${"c".repeat(64)}` }) }), { params: Promise.resolve({ id: "missing" }) });
   assert.equal(random.status, 404);
 
-  const forged = await PATCH(new Request(`http://localhost/api/comparisons/runs/${first.run.runId}`, { method: "PATCH", headers: { cookie: first.cookie, "content-type": "application/json", "x-real-ip": "198.51.100.46" }, body: JSON.stringify({ persistedOnchain: true, relation: "EQUIVALENT", consensusOutcome: "MAJORITY_AGREE" }) }), { params: Promise.resolve({ id: first.run.runId }) });
+  const forged = await PATCH(new Request(`http://localhost/api/comparisons/runs/${first.run.runId}`, { method: "PATCH", headers: { origin: "http://127.0.0.1:4187", cookie: first.cookie, "content-type": "application/json", "x-real-ip": "198.51.100.46" }, body: JSON.stringify({ persistedOnchain: true, relation: "EQUIVALENT", consensusOutcome: "MAJORITY_AGREE" }) }), { params: Promise.resolve({ id: first.run.runId }) });
   assert.equal(forged.status, 400);
   assert.equal(getComparisonRun(first.run.runId)?.persistedOnchain, false);
   const publicRun = await GET(new Request(`http://localhost/api/comparisons/runs/${first.run.runId}`, { headers: { "x-real-ip": "198.51.100.47" } }), { params: Promise.resolve({ id: first.run.runId }) });
@@ -89,7 +89,7 @@ test("historical runs remain readable but read-only and transaction binding reje
   delete record.ownerSessionHash;
   const read = await GET(new Request(`http://localhost/api/comparisons/runs/${historical.run.runId}`, { headers: { "x-real-ip": "198.51.100.49" } }), { params: Promise.resolve({ id: historical.run.runId }) });
   assert.equal(read.status, 200);
-  const write = await PATCH(new Request(`http://localhost/api/comparisons/runs/${historical.run.runId}`, { method: "PATCH", headers: { cookie: historical.cookie, "content-type": "application/json", "x-real-ip": "198.51.100.50" }, body: JSON.stringify({ comparisonTx: `0x${"d".repeat(64)}` }) }), { params: Promise.resolve({ id: historical.run.runId }) });
+  const write = await PATCH(new Request(`http://localhost/api/comparisons/runs/${historical.run.runId}`, { method: "PATCH", headers: { origin: "http://127.0.0.1:4187", cookie: historical.cookie, "content-type": "application/json", "x-real-ip": "198.51.100.50" }, body: JSON.stringify({ comparisonTx: `0x${"d".repeat(64)}` }) }), { params: Promise.resolve({ id: historical.run.runId }) });
   assert.equal(write.status, 403);
 
   assert.throws(() => validateTransactionClaim({ recipient: "0x1111111111111111111111111111111111111111" }, record, "comparison"), /different Eventum contract/);
